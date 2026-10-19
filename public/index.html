@@ -43,7 +43,10 @@
   .item .sub { color: var(--muted); font-size: calc(var(--font-size) - 2px); }
   .item.active, .item:hover { background: var(--hover); }
   .note { margin-top: 6px; font-size: 12px; color: var(--muted); }
-  .powered { padding: 4px 12px; text-align: right; font-size: 11px; color: var(--muted); }
+  .empty { padding: 9px 12px; font-size: calc(var(--font-size) - 2px); color: var(--muted); }
+  .footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 12px; border-top: 1px solid color-mix(in srgb, var(--border) 50%, transparent); }
+  .switch { padding: 0; border: 0; background: none; font: inherit; font-size: 13px; color: var(--focus); text-decoration: underline; cursor: pointer; text-align: left; }
+  .powered { margin-left: auto; font-size: 11px; color: var(--muted); white-space: nowrap; }
   .manual { margin-top: 6px; font-size: 13px; }
   .manual[hidden] { display: none; }
   .manual button { padding: 0; border: 0; background: none; font: inherit; color: var(--focus); text-decoration: underline; cursor: pointer; }
@@ -101,6 +104,8 @@ var SIZE_PARAMS = { fontSize: true, fieldHeight: true, cornerRadius: true };
 var PARAM_CHECK = { fontFamily: "font-family", fontSize: "width", fieldHeight: "width", cornerRadius: "width" };
 // Text parameters: searchPlaceholder, manualLinkText, labelStreet, labelLine2,
 // labelCity, labelProvince, labelPostal, labelCountry. Plus customCSS.
+// searchCountry: two-letter country code searched by default (e.g. ca, us, gb);
+// blank uses the server's PRIMARY_COUNTRY. People can switch to all countries.
 
 var input     = document.getElementById("addr");
 var list      = document.getElementById("list");
@@ -130,6 +135,8 @@ var LIMIT_MESSAGE = "Address search has reached its limit for now. Please enter 
 
 var sessionToken = newSessionToken();
 var customPlaceholder = false;   // set when the searchPlaceholder parameter is used
+var searchCountry = "";          // from the searchCountry parameter; "" = server default
+var searchScope = "country";     // "country" (default) or "world" after the person asks for it
 var currentItems = [];
 var activeIndex = -1;
 var requestSeq = 0;
@@ -212,6 +219,8 @@ function applySettings(settings) {
     document.querySelector('label[for="' + f.id + '"]').textContent = label;
   });
   document.getElementById("custom-css").textContent = get("customCSS");
+  var country = get("searchCountry").toLowerCase();
+  if (/^[a-z]{2}$/.test(country)) searchCountry = country;
 }
 
 // Refill the fields from a saved value (e.g. editing a submission)
@@ -281,12 +290,13 @@ function handleLookupError(err) {
   showFields(true);
 }
 
-function render(groups) {
+// res: { countryName, scope, groups: [{ label, items }] } from /api/suggest
+function render(res) {
   list.innerHTML = "";
   currentItems = [];
   activeIndex = -1;
 
-  groups.forEach(function (group) {
+  res.groups.forEach(function (group) {
     if (!group.items.length) return;
     var g = document.createElement("div");
     g.className = "group"; g.textContent = group.label;
@@ -304,14 +314,30 @@ function render(groups) {
     });
   });
 
-  if (currentItems.length) {
-    var pw = document.createElement("div");
-    pw.className = "powered"; pw.textContent = "Powered by Google";
-    list.appendChild(pw);
-    openList(true);
-  } else {
-    openList(false);
+  var inCountry = res.scope !== "world";
+  if (!currentItems.length) {
+    var empty = document.createElement("div");
+    empty.className = "empty";
+    empty.textContent = inCountry ? "No matches in " + res.countryName + "." : "No matches found.";
+    list.appendChild(empty);
   }
+
+  // Footer: switch between the default country and all countries, plus Google's note
+  var footer = document.createElement("div");
+  footer.className = "footer";
+  var sw = document.createElement("button");
+  sw.type = "button"; sw.className = "switch";
+  sw.textContent = inCountry ? "Not in " + res.countryName + "? Search all countries" : "Search " + res.countryName + " only";
+  sw.addEventListener("mousedown", function (e) { e.preventDefault(); });   // keep focus in the search bar
+  sw.addEventListener("click", function () { setScope(inCountry ? "world" : "country"); });
+  footer.appendChild(sw);
+  if (currentItems.length) {
+    var pw = document.createElement("span");
+    pw.className = "powered"; pw.textContent = "Powered by Google";
+    footer.appendChild(pw);
+  }
+  list.appendChild(footer);
+  openList(true);
 }
 
 function openList(open) {
@@ -369,22 +395,35 @@ function fillFields(p) {
 }
 
 /* ---------- Input events ---------- */
+function search(text) {
+  var mySeq = ++requestSeq;
+  var params = { q: text, scope: searchScope };
+  if (searchCountry) params.country = searchCountry;
+  api("suggest", params).then(function (res) {
+    if (mySeq !== requestSeq) return;   // ignore stale responses
+    note.hidden = true;                 // search works (again)
+    render(res);
+  }).catch(function (err) {
+    if (mySeq === requestSeq) openList(false);
+    handleLookupError(err);
+  });
+}
+
+// Switching keeps the person's choice for the rest of the visit and re-runs the search
+function setScope(scope) {
+  searchScope = scope;
+  clearTimeout(debounceTimer);
+  var text = input.value.trim();
+  if (text.length >= 3) search(text);
+  input.focus();
+}
+
 input.addEventListener("input", function () {
   cleanInput(input);
   clearTimeout(debounceTimer);
   var text = input.value.trim();
   if (text.length < 3) { openList(false); return; }
-  debounceTimer = setTimeout(function () {
-    var mySeq = ++requestSeq;
-    api("suggest", { q: text }).then(function (res) {
-      if (mySeq !== requestSeq) return;   // ignore stale responses
-      note.hidden = true;                 // search works (again)
-      render(res.groups);
-    }).catch(function (err) {
-      if (mySeq === requestSeq) openList(false);
-      handleLookupError(err);
-    });
-  }, DEBOUNCE_MS);
+  debounceTimer = setTimeout(function () { search(text); }, DEBOUNCE_MS);
 });
 
 input.addEventListener("keydown", function (e) {

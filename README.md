@@ -2,11 +2,11 @@
 
 A Jotform custom widget that finds addresses as you type (Google Places) and then splits the chosen address into standard fields: Street Address, Line 2, City, Province / State, Postal / Zip Code, and Country. It runs on Cloudflare Workers, which also calls Google on the widget's behalf, so **your Google API key never reaches the browser**.
 
-<img src="docs/screenshot.png" alt="Address search with suggestions grouped by country, above the filled-in address fields" width="560">
+<img src="docs/screenshot.png" alt="Address search showing Canadian suggestions and a Not in Canada? Search all countries link, above the filled-in address fields" width="560">
 
 ## Features
 
-- One search bar with suggestions from your home country first, then other countries.
+- One search bar that searches one country by default (set per form). A "Not in Canada? Search all countries" link switches that visitor to worldwide suggestions, and back. Each search makes a single Google request.
 - Picking a suggestion fills editable fields laid out like Jotform's built-in Address field. A "Can't find it? Enter address manually" link covers addresses Google doesn't know.
 - Colours, font, sizes and labels are set from Jotform widget parameters, with no code changes. A `customCSS` parameter covers anything else.
 - The Google key is stored as a Cloudflare secret. The widget page and its lookup API only respond inside a Jotform iframe.
@@ -53,7 +53,7 @@ In `cloudflare.config.ts`:
 
 - `name`: any Worker name.
 - `domains`: the address Jotform will load the widget from, on a domain in your Cloudflare account.
-- `PRIMARY_COUNTRY`: two-letter country code listed first in suggestions (default `ca`).
+- `PRIMARY_COUNTRY`: two-letter country code searched by default (default `ca`). Each form can override it with the `searchCountry` widget parameter.
 - `API_RATE_LIMIT`: address lookups allowed per visitor per minute (default 30). A person filling in the form uses about 2–10.
 
 In `src/index.ts`, `ALLOWED_HOSTS` lists the sites allowed to embed the widget. The default `jotform.com` covers `form.jotform.com`, `eu.jotform.com` and the form builder. Add your own domain if your forms use a Jotform custom domain.
@@ -101,6 +101,7 @@ All parameters are optional. Leave one out or blank to keep the default. Sizes t
 | `searchPlaceholder` | Search bar hint | Search for your address |
 | `manualLinkText` | Manual-entry link | Can't find it? Enter address manually |
 | `labelStreet`, `labelLine2`, `labelCity`, `labelProvince`, `labelPostal`, `labelCountry` | Field labels. These also name the lines in the submitted value. | Street Address, … |
+| `searchCountry` | Country searched by default, as a two-letter code (`ca`, `us`, `gb`, …). Visitors can still switch to all countries. | the Worker's `PRIMARY_COUNTRY` (`ca`) |
 | `customCSS` | Extra CSS added to the widget, e.g. `.field label { font-weight: 600 }`. Jotform's widget library applies a setting with this name too, so the widget's Custom CSS tab may work the same way. | empty |
 
 The widget can't read your form's theme automatically (browsers keep an iframe from another site apart from the page around it), so set the colours to match your form's Form Designer.

@@ -3,7 +3,9 @@
 // the browser.
 //
 //   GET /                         the widget page, only inside a Jotform iframe
-//   GET /api/suggest?q=&session=  address suggestions, home country first
+//   GET /api/suggest?q=&session=&country=&scope=
+//                                 address suggestions: in one country (default)
+//                                 or, with scope=world, anywhere. One Google call.
 //   GET /api/place?id=&session=   address parts for a picked suggestion
 //   GET /api/status               {"search":"ok"|"limited"} (Google quota used up)
 import { env } from "cloudflare:workers";
@@ -12,8 +14,6 @@ import { env } from "cloudflare:workers";
 const ALLOWED_HOSTS = ["jotform.com"];
 const FRAME_ANCESTORS = ALLOWED_HOSTS.flatMap((h) => [`https://${h}`, `https://*.${h}`]).join(" ");
 
-const MAX_PRIMARY = 5; // max suggestions from the home country
-const MAX_TOTAL = 8; // max suggestions overall
 const PLACE_TYPES = ["street_address", "premise", "subpremise", "route"];
 const PLACES_API = "https://places.googleapis.com/v1";
 const GOOGLE_TIMEOUT_MS = 5000;
@@ -25,6 +25,7 @@ const SUGGEST_FIELDS = [
 
 const SESSION_RE = /^[0-9a-f-]{36}$/i;
 const PLACE_ID_RE = /^[A-Za-z0-9_-]{1,512}$/;
+const COUNTRY_RE = /^[a-z]{2}$/;
 // Characters an address search may contain: letters in any language (with
 // accents), digits, spaces and . , ' ’ # / & ( ) -. Same list as the widget.
 const QUERY_RE = /^[\p{L}\p{M}\p{N} .,'’#/&()-]{3,200}$/u;
@@ -170,56 +171,32 @@ function toSuggestion(p: Prediction): Suggestion {
 	};
 }
 
-// The home country's display name ("Canada") and a matcher for suggestions
-// whose secondary text ends with it. Computed once per Worker instance.
-let region: { code: string; name: string; matcher: RegExp } | undefined;
-function homeRegion() {
-	if (!region) {
-		const code = (env.PRIMARY_COUNTRY || "ca").toLowerCase();
-		const name = new Intl.DisplayNames(["en"], { type: "region" }).of(code.toUpperCase()) ?? code;
-		const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-		region = { code, name, matcher: new RegExp(`(^|,\\s*)${escaped}$`, "i") };
+// English name for a country code ("ca" -> "Canada"), or undefined if the
+// code isn't a real region. Cached per Worker instance.
+const countryNames = new Map<string, string | undefined>();
+function countryName(code: string): string | undefined {
+	if (!countryNames.has(code)) {
+		let name: string | undefined;
+		try {
+			name = new Intl.DisplayNames(["en"], { type: "region", fallback: "none" }).of(code.toUpperCase());
+		} catch {
+			name = undefined;
+		}
+		countryNames.set(code, name && name !== "Unknown Region" ? name : undefined);
 	}
-	return region;
+	return countryNames.get(code);
 }
 
-// Home-country results first, then worldwide, without duplicates.
-async function suggest(input: string, session: string) {
-	const { code, name, matcher } = homeRegion();
-	const results = await Promise.allSettled([autocomplete(input, session, code), autocomplete(input, session)]);
-	const failures = results.flatMap((r) => (r.status === "rejected" ? [r.reason] : []));
-	if (failures.some((e) => e instanceof LookupError && e.message === "quota_exceeded")) {
-		throw new LookupError("quota_exceeded");
-	}
-	if (failures.length === results.length) throw new LookupError("lookup_failed");
-	const [home, world] = results.map((r) => (r.status === "fulfilled" ? r.value : []));
-
-	const seen = new Set<string>();
-	const primary: Suggestion[] = [];
-	const other: Suggestion[] = [];
-	for (const p of home) {
-		if (!p.placeId || seen.has(p.placeId) || primary.length >= MAX_PRIMARY) continue;
-		seen.add(p.placeId);
-		primary.push(toSuggestion(p));
-	}
-	for (const p of world) {
-		if (!p.placeId || seen.has(p.placeId)) continue;
-		const s = toSuggestion(p);
-		// Home-country results from the worldwide query belong in the first group
-		if (matcher.test(s.secondary) && primary.length < MAX_PRIMARY) {
-			seen.add(p.placeId);
-			primary.push(s);
-			continue;
-		}
-		if (primary.length + other.length >= MAX_TOTAL) continue;
-		seen.add(p.placeId);
-		other.push(s);
-	}
+// One Google call: addresses in `country`, or anywhere when scope is "world".
+async function suggest(input: string, session: string, country: string, scope: "country" | "world") {
+	const name = countryName(country) ?? country.toUpperCase();
+	const predictions = await autocomplete(input, session, scope === "country" ? country : undefined);
+	const items = predictions.filter((p) => p.placeId).map(toSuggestion);
 	return {
-		groups: [
-			{ label: name, items: primary },
-			{ label: "Other countries", items: other },
-		],
+		country,
+		countryName: name,
+		scope,
+		groups: [{ label: scope === "country" ? name : "All countries", items }],
 	};
 }
 
@@ -266,8 +243,12 @@ async function serveApi(request: Request, url: URL): Promise<Response> {
 	try {
 		if (url.pathname === "/api/suggest") {
 			const q = (url.searchParams.get("q") ?? "").trim();
-			if (!QUERY_RE.test(q)) return json({ error: "bad_request" }, 400);
-			return json(await suggest(q, session));
+			const country = (url.searchParams.get("country") || env.PRIMARY_COUNTRY || "ca").toLowerCase();
+			const scope = url.searchParams.get("scope") === "world" ? "world" : "country";
+			if (!QUERY_RE.test(q) || !COUNTRY_RE.test(country) || !countryName(country)) {
+				return json({ error: "bad_request" }, 400);
+			}
+			return json(await suggest(q, session, country, scope));
 		}
 		if (url.pathname === "/api/place") {
 			const id = url.searchParams.get("id") ?? "";
