@@ -42,7 +42,6 @@
   .item .main { font-weight: 500; }
   .item .sub { color: var(--muted); font-size: calc(var(--font-size) - 2px); }
   .item.active, .item:hover { background: var(--hover); }
-  .note { margin-top: 6px; font-size: 12px; color: var(--muted); }
   .empty { padding: 9px 12px; font-size: calc(var(--font-size) - 2px); color: var(--muted); }
   .footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 12px; border-top: 1px solid color-mix(in srgb, var(--border) 50%, transparent); }
   .switch { padding: 0; border: 0; background: none; font: inherit; font-size: 13px; color: var(--focus); text-decoration: underline; cursor: pointer; text-align: left; }
@@ -53,6 +52,7 @@
   /* Address parts, laid out like Jotform's built-in Address field */
   .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; margin-top: 14px; }
   .fields[hidden] { display: none; }
+  .search[hidden] ~ .fields { margin-top: 0; }   /* manual-only mode: no gap above */
   .field.full { grid-column: 1 / -1; }
   .field label { display: block; margin-top: 4px; font-size: 13px; color: var(--muted); }
   @media (max-width: 480px) { .fields { grid-template-columns: 1fr; } }
@@ -68,7 +68,6 @@
            role="combobox" aria-expanded="false" aria-controls="list" aria-autocomplete="list" aria-label="Search for your address">
   </div>
   <div id="list" class="list" role="listbox"></div>
-  <div id="note" class="note" hidden></div>
   <div id="manual" class="manual"><button type="button" id="manualBtn">Can't find it? Enter address manually</button></div>
   <div id="fields" class="fields" hidden>
     <div class="field full"><input id="f-street" type="text" maxlength="100" autocomplete="address-line1"><label for="f-street">Street Address</label></div>
@@ -110,7 +109,6 @@ var PARAM_CHECK = { fontFamily: "font-family", fontSize: "width", fieldHeight: "
 
 var input     = document.getElementById("addr");
 var list      = document.getElementById("list");
-var note      = document.getElementById("note");
 var searchBox = document.querySelector(".search");
 var manualBox = document.getElementById("manual");
 var manualBtn = document.getElementById("manualBtn");
@@ -132,7 +130,6 @@ FIELDS.forEach(function (f) { f.el = document.getElementById(f.id); field[f.key]
 // language (with accents), digits, spaces and . , ' ’ # / & ( ) -. Anything
 // else is removed as it's typed or pasted. The server checks searches the same way.
 var NOT_ALLOWED = /[^\p{L}\p{M}\p{N} .,'’#\/&()-]/gu;
-var LIMIT_MESSAGE = "Address search has reached its limit for now. Please enter your address below.";
 
 var sessionToken = newSessionToken();
 var customPlaceholder = false;   // set when the searchPlaceholder parameter is used
@@ -295,23 +292,30 @@ function api(path, params) {
   });
 }
 
-// not_configured: the server has no Google key, so searching can't work at all.
-// quota_exceeded / rate_limited: the lookup limit is reached; switch to manual entry.
-// Anything else (Google outage, network): keep the search bar for a retry, but
-// say so and open the fields so the form can still be filled.
-function handleLookupError(err) {
+// When search can't be used (no Google key, daily quota or per-visitor limit
+// reached), quietly switch to plain address fields, carrying over anything
+// typed. A one-off failure (Google outage, network) just opens the fields and
+// keeps the search bar for another try. No message either way: people simply
+// see a normal address question.
+function handleLookupError(err, typed) {
   if (window.console) console.warn("Address lookup failed:", err.message);
-  if (err.message === "not_configured") {
-    searchUnavailable("Address search is unavailable right now. Please type your address below.");
+  if (/^(not_configured|quota_exceeded|rate_limited)$/.test(err.message)) {
+    switchToManual(typed);
     return;
   }
-  if (err.message === "quota_exceeded" || err.message === "rate_limited") {
-    searchUnavailable(LIMIT_MESSAGE);
-    return;
-  }
-  note.hidden = false;
-  note.textContent = "Address search isn't available right now. Please enter your address below.";
   showFields(true);
+}
+
+function switchToManual(typed) {
+  typed = cleanText(typed).trim();
+  searchBox.hidden = true;
+  openList(false);
+  showFields(true);
+  if (typed && !fieldValue(FIELDS[0])) {
+    field.street.value = typed;
+    pushToForm();
+  }
+  if (typed) field.street.focus();   // only mid-typing; never steal focus on page load
 }
 
 // res: { countryName, scope, groups: [{ label, items }] } from /api/suggest
@@ -397,9 +401,13 @@ function choose(i) {
     input.value = "";
     if (!customPlaceholder) input.placeholder = "Search for a different address";
   }).catch(function (err) {
-    // Details unavailable: let the person type the parts themselves
-    handleLookupError(err);
-    showFields(true);
+    // Details unavailable: start the fields off with what was picked
+    handleLookupError(err, item.suggestion.main);
+    input.value = "";
+    if (!fieldValue(FIELDS[0])) {
+      field.street.value = cleanText(item.suggestion.main);
+      pushToForm();
+    }
     field.street.focus();
   }).finally(function () {
     sessionToken = newSessionToken();   // a session ends when a place is selected
@@ -427,11 +435,10 @@ function search(text) {
   if (searchCountry) params.country = searchCountry;
   api("suggest", params).then(function (res) {
     if (mySeq !== requestSeq) return;   // ignore stale responses
-    note.hidden = true;                 // search works (again)
     render(res);
   }).catch(function (err) {
     if (mySeq === requestSeq) openList(false);
-    handleLookupError(err);
+    handleLookupError(err, input.value);
   });
 }
 
@@ -471,22 +478,14 @@ manualBtn.addEventListener("click", function () {
   field.street.focus();
 });
 
-function searchUnavailable(message) {
-  searchBox.hidden = true;
-  openList(false);
-  note.hidden = false;
-  note.textContent = message;
-  showFields(true);
-}
-
 /* ---------- Start ---------- */
 // Keep the form's frame as tall as the widget (rotation, wrapping labels, fonts loading)
 if (window.ResizeObserver) new ResizeObserver(resizeFrame).observe(document.querySelector(".wrap"));
 setupJotform();
-// If the lookup limit is already reached, offer manual entry straight away
+// If the lookup limit is already reached, show plain address fields straight away
 // (this check doesn't use any Google quota). Other errors wait until someone searches.
 api("status", {}).then(function (res) {
-  if (res.search === "limited") searchUnavailable(LIMIT_MESSAGE);
+  if (res.search === "limited") switchToManual();
 }).catch(function (err) {
   if (/^(not_configured|quota_exceeded|rate_limited)$/.test(err.message)) handleLookupError(err);
 });

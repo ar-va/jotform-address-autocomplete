@@ -25,7 +25,7 @@ You host it yourself, for free, on Cloudflare. Your Google key stays private on 
 - **Search as you type.** Suggestions come from Google Maps. You can limit searches to one country (for example Canada), with a "Not in Canada? Search all countries" link for visitors from elsewhere, or search the whole world.
 - **Fills in the address for you.** Picking a suggestion fills editable fields laid out like Jotform's own Address field. A "Can't find it? Enter address manually" link is always there.
 - **Matches your form.** Colours, font, sizes and labels are set from Jotform's widget settings, with no code changes.
-- **Keeps working when limits are reached.** If the daily Google limit runs out, the widget says so and switches to manual entry instead of failing silently.
+- **Keeps working when limits are reached.** If the daily Google limit runs out, the widget quietly shows the regular address fields instead of the search, so visitors simply type their address. Anything they'd already typed carries over.
 - **Readable submissions.** Each entry is saved like this, and loads back into the fields if you edit a submission:
 
   ```
@@ -197,7 +197,7 @@ Tips:
 **Opening the widget address shows "Forbidden".**
 That's normal. The widget only loads inside a Jotform form. Test it through your form's preview.
 
-**No suggestions appear, or the form says "Address search has reached its limit for now".**
+**No suggestions appear, or the widget shows only the address fields (no search bar).**
 Most often Google's daily limit is used up. Check **Google Cloud → APIs & Services → Places API (New) → Quotas**. The limit resets at midnight Pacific Time. You can raise it there; that needs billing turned on. Also check that **billing** is active and **Places API (New)** is enabled. For the exact reason, open the **Cloudflare dashboard → Workers & Pages → your widget → Observability** and look for `Google Places … failed` messages.
 
 **The upload (`cf deploy`) fails.**
@@ -249,14 +249,14 @@ In short:
 - **Your Google key is never exposed.** It's stored as a Cloudflare secret and used only by your Cloudflare server. It isn't in the widget, the form or this repository.
 - **The widget only runs inside Jotform forms.** Opening it directly, or embedding it on another website, is blocked.
 - **Typing is filtered.** The fields accept letters (any language, with accents), numbers, spaces and `. , ' ’ # / & ( ) -`. Anything else is removed, so pasted code or spreadsheet formulas can't sneak into submissions. The server double-checks searches.
-- **Abuse is limited.** The per-visitor limit and your Google daily quota cap how much anyone can use. When a limit is reached, visitors simply enter their address by hand.
+- **Abuse is limited.** The per-visitor limit and your Google daily quota cap how much anyone can use. When a limit is reached, the widget quietly switches to plain address fields.
 
 <details>
 <summary><strong>Details for technical readers</strong></summary>
 
 - **Widget page:** served only for `Sec-Fetch-Dest: iframe` (with a `jotform.com` Referer fallback for older browsers) and a CSP `frame-ancestors` restricted to `jotform.com`. Direct visits get 403, and only GET/HEAD is allowed. It also sends `nosniff`, `Referrer-Policy: same-origin`, a Permissions-Policy, and a CSP blocking plugins, `<base>` and form posts. Script sources aren't restricted, because Jotform's widget library loads its own theme scripts and fonts at runtime.
 - **Lookup API:** GET only and same-origin only (`Sec-Fetch-Site`). Strict checks on query characters and length, session-token and place-ID format, and country codes. Generic error messages, `Cache-Control: no-store`, and a per-IP rate limit (Workers rate-limiting binding). Google calls time out after 5 s.
-- **Quota handling:** on a Google 429 the Worker stores a 10-minute flag in the Cache API and answers `quota_exceeded` without calling Google. `/api/status` lets the widget switch to manual entry on load without using quota.
+- **Quota handling:** on a Google 429 the Worker stores a 10-minute flag in the Cache API and answers `quota_exceeded` without calling Google. `/api/status` lets the widget show plain address fields on load without using quota. No message is shown to visitors.
 - **Output:** suggestions and labels are inserted with `textContent`, never as HTML. Saved values never start with `-`.
 - **Logging:** Google errors are logged server-side with query strings redacted, since they contain what people type.
 - **Known limits:** headers can be forged by scripts, and any Jotform account that knows your URL can embed the widget. The rate limit slows a single source down; distributed abuse is capped by your Google quota. Submissions come from the visitor's browser like any form field, so treat them as unverified input.
