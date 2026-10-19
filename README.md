@@ -254,7 +254,8 @@ In short:
 
 - **Your Google key is never exposed.** It's stored as a Cloudflare secret and used only by your Cloudflare server. It isn't in the widget, the form or this repository.
 - **The widget only runs inside Jotform forms.** Opening it directly, or embedding it on another website, is blocked.
-- **Typing is filtered.** The fields accept letters (any language, with accents), numbers, spaces and `. , ' ’ # / & ( ) -`. Anything else is removed, so pasted code or spreadsheet formulas can't sneak into submissions. The server double-checks searches.
+- **Typing is filtered.** The fields accept letters (any language, with accents), numbers, spaces and `. , ' ’ # / & ( ) -`; postal codes accept only letters, numbers, spaces and `-`. Anything else is removed, so pasted code or spreadsheet formulas can't sneak into submissions. The server double-checks searches.
+- **Length limits:** search 200 characters, street and line 2 100, city 80, province or state 60, postal code 12, country 60. Values from Google are trimmed to fit.
 - **Abuse is limited.** The per-visitor limit and your Google daily quota cap how much anyone can use. When a limit is reached, the widget quietly switches to plain address fields.
 
 <details>

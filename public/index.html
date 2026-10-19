@@ -70,12 +70,12 @@
   <div id="list" class="list" role="listbox"></div>
   <div id="manual" class="manual"><button type="button" id="manualBtn">Can't find it? Enter address manually</button></div>
   <div id="fields" class="fields" hidden>
-    <div class="field full"><input id="f-street" type="text" maxlength="100" autocomplete="address-line1"><label for="f-street">Street Address</label></div>
-    <div class="field full"><input id="f-line2" type="text" maxlength="100" autocomplete="address-line2"><label for="f-line2">Street Address Line 2</label></div>
-    <div class="field"><input id="f-city" type="text" maxlength="100" autocomplete="address-level2"><label for="f-city">City</label></div>
-    <div class="field"><input id="f-province" type="text" maxlength="100" autocomplete="address-level1"><label for="f-province">Province / State</label></div>
-    <div class="field"><input id="f-postal" type="text" maxlength="100" autocomplete="postal-code"><label for="f-postal">Postal / Zip Code</label></div>
-    <div class="field"><input id="f-country" type="text" maxlength="100" autocomplete="country-name"><label for="f-country">Country</label></div>
+    <div class="field full"><input id="f-street" type="text" autocomplete="address-line1"><label for="f-street">Street Address</label></div>
+    <div class="field full"><input id="f-line2" type="text" autocomplete="address-line2"><label for="f-line2">Street Address Line 2</label></div>
+    <div class="field"><input id="f-city" type="text" autocomplete="address-level2"><label for="f-city">City</label></div>
+    <div class="field"><input id="f-province" type="text" autocomplete="address-level1"><label for="f-province">Province / State</label></div>
+    <div class="field"><input id="f-postal" type="text" autocomplete="postal-code"><label for="f-postal">Postal / Zip Code</label></div>
+    <div class="field"><input id="f-country" type="text" autocomplete="country-name"><label for="f-country">Country</label></div>
   </div>
 </div>
 
@@ -114,17 +114,26 @@ var manualBox = document.getElementById("manual");
 var manualBtn = document.getElementById("manualBtn");
 var fieldsBox = document.getElementById("fields");
 
-// The labels are also the line names in the submitted value, e.g. "City: Guelph".
+// Postal codes worldwide are letters, digits, spaces and hyphens, at most 10
+// characters (e.g. 12345-6789, SW1A 1AA, M6K 3J1); 12 leaves a little room.
+var POSTAL_NOT_ALLOWED = /[^\p{L}\p{N} -]/gu;
+
+// max: longest value accepted. notAllowed: characters removed (default NOT_ALLOWED).
+// Labels also name the lines of submissions saved by earlier versions ("City: Guelph").
 var FIELDS = [
-  { key: "street",   id: "f-street",   param: "labelStreet",   label: "Street Address" },
-  { key: "line2",    id: "f-line2",    param: "labelLine2",    label: "Street Address Line 2" },
-  { key: "city",     id: "f-city",     param: "labelCity",     label: "City" },
-  { key: "province", id: "f-province", param: "labelProvince", label: "Province / State", oldLabels: ["State / Province"] },
-  { key: "postal",   id: "f-postal",   param: "labelPostal",   label: "Postal / Zip Code" },
-  { key: "country",  id: "f-country",  param: "labelCountry",  label: "Country" }
+  { key: "street",   id: "f-street",   param: "labelStreet",   label: "Street Address",        max: 100 },
+  { key: "line2",    id: "f-line2",    param: "labelLine2",    label: "Street Address Line 2", max: 100 },
+  { key: "city",     id: "f-city",     param: "labelCity",     label: "City",                  max: 80 },
+  { key: "province", id: "f-province", param: "labelProvince", label: "Province / State",      max: 60, oldLabels: ["State / Province"] },
+  { key: "postal",   id: "f-postal",   param: "labelPostal",   label: "Postal / Zip Code",     max: 12, notAllowed: POSTAL_NOT_ALLOWED },
+  { key: "country",  id: "f-country",  param: "labelCountry",  label: "Country",               max: 60 }
 ];
 var field = {};
-FIELDS.forEach(function (f) { f.el = document.getElementById(f.id); field[f.key] = f.el; });
+FIELDS.forEach(function (f) {
+  f.el = document.getElementById(f.id);
+  f.el.maxLength = f.max;
+  field[f.key] = f.el;
+});
 
 // Characters allowed in the search bar and the address fields: letters in any
 // language (with accents), digits, spaces and . , ' ’ # / & ( ) -. Anything
@@ -143,16 +152,21 @@ var debounceTimer = null;
 var inJotform = window.parent !== window && typeof JFCustomWidget !== "undefined";
 
 /* ---------- Allowed characters ---------- */
-function cleanText(value) {
-  return String(value == null ? "" : value).replace(/\s/g, " ").replace(NOT_ALLOWED, "");
+function cleanText(value, notAllowed) {
+  return String(value == null ? "" : value).replace(/\s/g, " ").replace(notAllowed || NOT_ALLOWED, "");
+}
+
+// Put a value into an address field, following that field's rules
+function setField(f, value) {
+  f.el.value = cleanText(value, f.notAllowed).slice(0, f.max);
 }
 
 // Clean an input in place, keeping the cursor where the person was typing
-function cleanInput(el) {
-  var before = el.value, after = cleanText(before);
+function cleanInput(el, notAllowed) {
+  var before = el.value, after = cleanText(before, notAllowed);
   if (after === before) return;
   var caret = el.selectionStart == null ? before.length : el.selectionStart;
-  var pos = cleanText(before.slice(0, caret)).length;   // only removals before the cursor move it
+  var pos = cleanText(before.slice(0, caret), notAllowed).length;   // only removals before the cursor move it
   el.value = after;
   try { el.setSelectionRange(pos, pos); } catch (e) {}
 }
@@ -265,7 +279,7 @@ function restore(value) {
     var label = line.slice(0, i), v = line.slice(i + 2);
     FIELDS.forEach(function (f) {
       // oldLabels: names used by earlier versions, so older submissions still load
-      if (f.label === label || (f.oldLabels || []).indexOf(label) !== -1) { f.el.value = cleanText(v); any = true; }
+      if (f.label === label || (f.oldLabels || []).indexOf(label) !== -1) { setField(f, v); any = true; }
     });
   });
   if (any) {
@@ -329,7 +343,7 @@ function switchToManual(typed) {
   openList(false);
   showFields(true);
   if (typed && !fieldValue(FIELDS[0])) {
-    field.street.value = typed;
+    setField(FIELDS[0], typed);
     pushToForm();
   }
   if (typed) field.street.focus();   // only mid-typing; never steal focus on page load
@@ -422,7 +436,7 @@ function choose(i) {
     handleLookupError(err, item.suggestion.main);
     input.value = "";
     if (!fieldValue(FIELDS[0])) {
-      field.street.value = cleanText(item.suggestion.main);
+      setField(FIELDS[0], item.suggestion.main);
       pushToForm();
     }
     field.street.focus();
@@ -433,12 +447,12 @@ function choose(i) {
 
 function fillFields(p) {
   var unit = cleanText(p.unit);
-  field.street.value   = cleanText([p.streetNumber, p.route].filter(Boolean).join(" "));
-  field.line2.value    = /^\d+[A-Za-z]?$/.test(unit) ? "Unit " + unit : unit;
-  field.city.value     = cleanText(p.city);
-  field.province.value = cleanText(p.province);
-  field.postal.value   = cleanText(p.postalCode);
-  field.country.value  = cleanText(p.country);
+  setField(FIELDS[0], [p.streetNumber, p.route].filter(Boolean).join(" "));
+  setField(FIELDS[1], /^\d+[A-Za-z]?$/.test(unit) ? "Unit " + unit : unit);
+  setField(FIELDS[2], p.city);
+  setField(FIELDS[3], p.province);
+  setField(FIELDS[4], p.postalCode);
+  setField(FIELDS[5], p.country);
   showFields(true);
   pushToForm();
   // A street without a house number (or nothing at all) needs finishing by hand
@@ -487,7 +501,7 @@ input.addEventListener("keydown", function (e) {
 input.addEventListener("blur", function () { setTimeout(function () { openList(false); }, 150); });
 
 FIELDS.forEach(function (f) {
-  f.el.addEventListener("input", function () { cleanInput(f.el); pushToForm(); });
+  f.el.addEventListener("input", function () { cleanInput(f.el, f.notAllowed); pushToForm(); });
 });
 
 manualBtn.addEventListener("click", function () {
