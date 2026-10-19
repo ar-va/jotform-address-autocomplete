@@ -133,7 +133,6 @@ var NOT_ALLOWED = /[^\p{L}\p{M}\p{N} .,'’#\/&()-]/gu;
 
 var sessionToken = newSessionToken();
 var customPlaceholder = false;   // set when the searchPlaceholder parameter is used
-var columnPrefix = "";           // columnPrefix parameter: "Billing " fills "Billing City", …
 var restoredValue = "";          // a saved address we couldn't split back into fields
 var searchCountry = "";          // two-letter code from the searchCountry parameter; "" = everywhere
 var searchScope = "world";       // "country" when a country is set, until the person switches
@@ -209,25 +208,10 @@ function isValid() {
   return !!(fieldValue(FIELDS[0]) && fieldValue(FIELDS[2]) && fieldValue(FIELDS[5]));
 }
 
-// Each part also goes into the form field with the same label (plus the optional
-// columnPrefix), e.g. a hidden Short Text field labelled "City". Those fields
-// become separate columns in submissions. Fields that don't exist are ignored.
-function fillColumns() {
-  if (!inJotform || !JFCustomWidget.setFieldsValueByLabel) return;
-  try {
-    JFCustomWidget.setFieldsValueByLabel(FIELDS.map(function (f) {
-      return { label: columnPrefix + f.label, value: fieldValue(f) };
-    }));
-  } catch (e) {
-    if (window.console) console.warn("Couldn't fill the address columns:", e);
-  }
-}
-
 function pushToForm() {
   if (!inJotform) return;
   if (formattedAddress()) restoredValue = "";   // a new address replaces the saved one
   JFCustomWidget.sendData({ value: currentValue() });
-  fillColumns();
 }
 
 function resizeFrame() {
@@ -266,7 +250,6 @@ function applySettings(settings) {
     document.querySelector('label[for="' + f.id + '"]').textContent = label;
   });
   document.getElementById("custom-css").textContent = get("customCSS");
-  columnPrefix = get("columnPrefix") ? get("columnPrefix") + " " : "";
   searchCountry = parseCountry(get("searchCountry"));
   searchScope = searchCountry ? "country" : "world";
 }
@@ -301,7 +284,6 @@ function setupJotform() {
     applySettings(settings);
     if (formData && formData.value) restore(formData.value);
     JFCustomWidget.subscribe("submit", function () {
-      fillColumns();
       JFCustomWidget.sendSubmit({ valid: isValid(), value: currentValue() });
     });
     resizeFrame();
