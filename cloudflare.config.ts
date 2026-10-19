@@ -19,8 +19,6 @@ export default defineConfig({
 			// Google Maps Platform key with Places API (New). Set it in .dev.vars,
 			// then deploy with: cf deploy --secrets-file .dev.vars
 			GOOGLE_MAPS_API_KEY: bindings.secret(),
-			// Suggestions from this country (ISO 3166-1 alpha-2 code) are listed first.
-			PRIMARY_COUNTRY: bindings.text("ca"),
 			// Address lookups allowed per visitor (IP address) per minute. A person
 			// filling in the form uses about 2–10; this stops one visitor from
 			// burning through the daily Google quota. The namespace is any number

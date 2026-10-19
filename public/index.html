@@ -104,8 +104,9 @@ var SIZE_PARAMS = { fontSize: true, fieldHeight: true, cornerRadius: true };
 var PARAM_CHECK = { fontFamily: "font-family", fontSize: "width", fieldHeight: "width", cornerRadius: "width" };
 // Text parameters: searchPlaceholder, manualLinkText, labelStreet, labelLine2,
 // labelCity, labelProvince, labelPostal, labelCountry. Plus customCSS.
-// searchCountry: two-letter country code searched by default (e.g. ca, us, gb);
-// blank uses the server's PRIMARY_COUNTRY. People can switch to all countries.
+// searchCountry: country searched by default, e.g. "Canada (CA)" from the
+// dropdown in docs/countries.txt, "Canada" or "ca". Blank or "All countries"
+// searches everywhere. With a country set, people can switch to all countries.
 
 var input     = document.getElementById("addr");
 var list      = document.getElementById("list");
@@ -135,8 +136,8 @@ var LIMIT_MESSAGE = "Address search has reached its limit for now. Please enter 
 
 var sessionToken = newSessionToken();
 var customPlaceholder = false;   // set when the searchPlaceholder parameter is used
-var searchCountry = "";          // from the searchCountry parameter; "" = server default
-var searchScope = "country";     // "country" (default) or "world" after the person asks for it
+var searchCountry = "";          // two-letter code from the searchCountry parameter; "" = everywhere
+var searchScope = "world";       // "country" when a country is set, until the person switches
 var currentItems = [];
 var activeIndex = -1;
 var requestSeq = 0;
@@ -161,6 +162,29 @@ function cleanInput(el) {
 // A saved value never starts with "-", so spreadsheets can't read it as a formula
 function fieldValue(f) {
   return f.el.value.trim().replace(/^-+\s*/, "");
+}
+
+/* ---------- Default country ---------- */
+// Accepts "Canada (CA)", "CA" or "Canada"; returns "ca", or "" for everywhere
+// (blank, "All countries", or anything unrecognised).
+function parseCountry(value) {
+  var v = String(value || "").trim();
+  var code = /\(([A-Za-z]{2})\)\s*$/.exec(v);
+  if (code) return code[1].toLowerCase();
+  if (/^[A-Za-z]{2}$/.test(v)) return v.toLowerCase();
+  if (!v || !window.Intl || !Intl.DisplayNames) return "";
+  var wanted = normalizeName(v), names = new Intl.DisplayNames(["en"], { type: "region", fallback: "none" });
+  for (var a = 65; a <= 90; a++) {
+    for (var b = 65; b <= 90; b++) {
+      var c = String.fromCharCode(a, b), name = names.of(c);
+      if (name && normalizeName(name) === wanted) return c.toLowerCase();
+    }
+  }
+  return "";
+}
+
+function normalizeName(name) {
+  return name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/’/g, "'").toLowerCase();
 }
 
 /* ---------- Jotform plumbing ---------- */
@@ -219,8 +243,8 @@ function applySettings(settings) {
     document.querySelector('label[for="' + f.id + '"]').textContent = label;
   });
   document.getElementById("custom-css").textContent = get("customCSS");
-  var country = get("searchCountry").toLowerCase();
-  if (/^[a-z]{2}$/.test(country)) searchCountry = country;
+  searchCountry = parseCountry(get("searchCountry"));
+  searchScope = searchCountry ? "country" : "world";
 }
 
 // Refill the fields from a saved value (e.g. editing a submission)
@@ -314,7 +338,7 @@ function render(res) {
     });
   });
 
-  var inCountry = res.scope !== "world";
+  var inCountry = res.scope === "country";
   if (!currentItems.length) {
     var empty = document.createElement("div");
     empty.className = "empty";
@@ -325,18 +349,20 @@ function render(res) {
   // Footer: switch between the default country and all countries, plus Google's note
   var footer = document.createElement("div");
   footer.className = "footer";
-  var sw = document.createElement("button");
-  sw.type = "button"; sw.className = "switch";
-  sw.textContent = inCountry ? "Not in " + res.countryName + "? Search all countries" : "Search " + res.countryName + " only";
-  sw.addEventListener("mousedown", function (e) { e.preventDefault(); });   // keep focus in the search bar
-  sw.addEventListener("click", function () { setScope(inCountry ? "world" : "country"); });
-  footer.appendChild(sw);
+  if (res.country) {   // only when the form has a default country
+    var sw = document.createElement("button");
+    sw.type = "button"; sw.className = "switch";
+    sw.textContent = inCountry ? "Not in " + res.countryName + "? Search all countries" : "Search " + res.countryName + " only";
+    sw.addEventListener("mousedown", function (e) { e.preventDefault(); });   // keep focus in the search bar
+    sw.addEventListener("click", function () { setScope(inCountry ? "world" : "country"); });
+    footer.appendChild(sw);
+  }
   if (currentItems.length) {
     var pw = document.createElement("span");
     pw.className = "powered"; pw.textContent = "Powered by Google";
     footer.appendChild(pw);
   }
-  list.appendChild(footer);
+  if (footer.childNodes.length) list.appendChild(footer);
   openList(true);
 }
 

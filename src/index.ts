@@ -4,8 +4,9 @@
 //
 //   GET /                         the widget page, only inside a Jotform iframe
 //   GET /api/suggest?q=&session=&country=&scope=
-//                                 address suggestions: in one country (default)
-//                                 or, with scope=world, anywhere. One Google call.
+//                                 address suggestions in `country` (two-letter
+//                                 code), or anywhere when there's no country or
+//                                 scope=world. One Google call.
 //   GET /api/place?id=&session=   address parts for a picked suggestion
 //   GET /api/status               {"search":"ok"|"limited"} (Google quota used up)
 import { env } from "cloudflare:workers";
@@ -187,16 +188,19 @@ function countryName(code: string): string | undefined {
 	return countryNames.get(code);
 }
 
-// One Google call: addresses in `country`, or anywhere when scope is "world".
-async function suggest(input: string, session: string, country: string, scope: "country" | "world") {
-	const name = countryName(country) ?? country.toUpperCase();
-	const predictions = await autocomplete(input, session, scope === "country" ? country : undefined);
+// One Google call: addresses in `country`, or anywhere when there's no
+// country or scope is "world". `country` is echoed back so the widget can
+// offer to switch between the two.
+async function suggest(input: string, session: string, country: string | undefined, scope: "country" | "world") {
+	const name = country ? countryName(country) : undefined;
+	const inCountry = country !== undefined && scope === "country";
+	const predictions = await autocomplete(input, session, inCountry ? country : undefined);
 	const items = predictions.filter((p) => p.placeId).map(toSuggestion);
 	return {
-		country,
-		countryName: name,
-		scope,
-		groups: [{ label: scope === "country" ? name : "All countries", items }],
+		country: country ?? null,
+		countryName: name ?? null,
+		scope: inCountry ? "country" : "world",
+		groups: [{ label: inCountry ? name : "All countries", items }],
 	};
 }
 
@@ -243,9 +247,10 @@ async function serveApi(request: Request, url: URL): Promise<Response> {
 	try {
 		if (url.pathname === "/api/suggest") {
 			const q = (url.searchParams.get("q") ?? "").trim();
-			const country = (url.searchParams.get("country") || env.PRIMARY_COUNTRY || "ca").toLowerCase();
+			const country = url.searchParams.get("country")?.toLowerCase() || undefined;
 			const scope = url.searchParams.get("scope") === "world" ? "world" : "country";
-			if (!QUERY_RE.test(q) || !COUNTRY_RE.test(country) || !countryName(country)) {
+			if (!QUERY_RE.test(q)) return json({ error: "bad_request" }, 400);
+			if (country !== undefined && (!COUNTRY_RE.test(country) || !countryName(country))) {
 				return json({ error: "bad_request" }, 400);
 			}
 			return json(await suggest(q, session, country, scope));
