@@ -14,6 +14,7 @@ You host it yourself, for free, on Cloudflare. Your Google key stays private on 
 - [What you need](#what-you-need)
 - [Setup, step by step](#setup-step-by-step)
 - [Customise the look and wording](#customise-the-look-and-wording)
+- [Separate columns for each part](#separate-columns-for-each-part)
 - [Troubleshooting](#troubleshooting)
 - [Updating your widget later](#updating-your-widget-later)
 - [Costs and limits](#costs-and-limits)
@@ -26,16 +27,7 @@ You host it yourself, for free, on Cloudflare. Your Google key stays private on 
 - **Fills in the address for you.** Picking a suggestion fills editable fields laid out like Jotform's own Address field. A "Can't find it? Enter address manually" link is always there.
 - **Matches your form.** Colours, font, sizes and labels are set from Jotform's widget settings, with no code changes.
 - **Keeps working when limits are reached.** If the daily Google limit runs out, the widget quietly shows the regular address fields instead of the search, so visitors simply type their address. Anything they'd already typed carries over.
-- **Readable submissions.** Each entry is saved like this, and loads back into the fields if you edit a submission:
-
-  ```
-  Street Address: 219 Dufferin Street
-  Street Address Line 2: Unit 206B
-  City: Toronto
-  Province / State: Ontario
-  Postal / Zip Code: M6K 3J1
-  Country: Canada
-  ```
+- **Clean submissions.** The widget's answer is one formatted line, such as `219 Dufferin Street, Unit 206B, Toronto, Ontario M6K 3J1, Canada`. Optionally, each part can also go into its own column; see [Separate columns for each part](#separate-columns-for-each-part).
 
 ## What you need
 
@@ -184,13 +176,30 @@ When adding a parameter, fill in:
 | `searchPlaceholder` | Hint in the search bar | Text | leave empty |
 | `manualLinkText` | "Can't find it? Enter address manually" | Text | leave empty |
 | `labelStreet` `labelLine2` `labelCity` `labelProvince` `labelPostal` `labelCountry` | The labels under each field, e.g. for another language | Text | leave empty |
+| `columnPrefix` | Only for [separate columns](#separate-columns-for-each-part) with more than one address on a form, e.g. `Billing` | Text | leave empty |
 | `customCSS` | Anything else, as CSS, e.g. `.field label { font-weight: 600 }` | Textarea | leave empty |
 
 Tips:
 
 - **Colour settings say "undefined"?** Jotform only applies Default Values when the widget is added to a form. Delete the widget from the form and add it again. Do this before you collect real submissions.
 - **Matching your form's colours:** the widget can't read your form's theme by itself, so copy the colours from your form's **Form Designer** into the colour settings.
-- **Changing labels after collecting submissions:** the labels also name the lines in saved entries. Old entries with the old labels won't fill back into the fields when edited.
+- **Changing labels:** the labels also decide which form fields get filled for [separate columns](#separate-columns-for-each-part), so rename those fields to match.
+
+## Separate columns for each part
+
+By default, each submission has one column with the full address. To also get **Street Address, Line 2, City, Province / State, Postal / Zip Code and Country as separate columns** (handy for spreadsheets and mailing lists):
+
+1. In the form builder, add six **Short Text** fields with exactly these labels:
+   `Street Address`, `Street Address Line 2`, `City`, `Province / State`, `Postal / Zip Code`, `Country`
+2. Hide each one from visitors: open the field's **Properties → Advanced** and turn on **Hide field**.
+3. That's it. When someone picks or types an address, the widget fills these fields, and each one becomes its own column in your submissions.
+
+Notes:
+
+- The labels must match exactly. If you changed a label with the `labelCity`-style settings, use your label instead.
+- **Two addresses on one form** (e.g. billing and shipping): set the widget's `columnPrefix` setting to `Billing` and label the hidden fields `Billing Street Address`, `Billing City`, and so on. Use `Shipping` for the other widget.
+- If you skip these fields, nothing changes; the widget just saves the one-line address.
+- **Editing a submission:** submissions saved in the one-line format keep their address as-is unless you pick or type a new one, because a formatted line can't always be split back into parts reliably.
 
 ## Troubleshooting
 
@@ -209,6 +218,9 @@ Read the message:
 
 **Search worked, then stopped after I changed my Google key.**
 Put the new key in `.dev.vars` and run `cf deploy --secrets-file .dev.vars` again.
+
+**The separate columns stay empty.**
+Check that the hidden fields' labels match exactly (including spaces and the `/`), and that the fields are hidden with **Hide field**, not removed by a condition.
 
 **The widget looks cut off or too tall in the form.**
 It resizes itself as you use it. If it doesn't, check that the widget's URL in Jotform is exactly your widget address.

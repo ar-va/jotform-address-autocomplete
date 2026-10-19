@@ -133,6 +133,8 @@ var NOT_ALLOWED = /[^\p{L}\p{M}\p{N} .,'’#\/&()-]/gu;
 
 var sessionToken = newSessionToken();
 var customPlaceholder = false;   // set when the searchPlaceholder parameter is used
+var columnPrefix = "";           // columnPrefix parameter: "Billing " fills "Billing City", …
+var restoredValue = "";          // a saved address we couldn't split back into fields
 var searchCountry = "";          // two-letter code from the searchCountry parameter; "" = everywhere
 var searchScope = "world";       // "country" when a country is set, until the person switches
 var currentItems = [];
@@ -185,23 +187,47 @@ function normalizeName(name) {
 }
 
 /* ---------- Jotform plumbing ---------- */
+// The widget's own answer: one formatted line, e.g.
+// "219 Dufferin Street, Unit 206B, Toronto, Ontario M6K 3J1, Canada"
+function formattedAddress() {
+  var v = {};
+  FIELDS.forEach(function (f) { v[f.key] = fieldValue(f); });
+  var region = [v.province, v.postal].filter(Boolean).join(" ");
+  return [v.street, v.line2, v.city, region, v.country].filter(Boolean).join(", ");
+}
+
+// When editing a submission we couldn't split back into fields, keep the saved
+// address until the person enters a new one, so nothing is lost
 function currentValue() {
-  return FIELDS
-    .filter(function (f) { return fieldValue(f); })
-    .map(function (f) { return f.label + ": " + fieldValue(f); })
-    .join("\n");
+  return formattedAddress() || restoredValue;
 }
 
 // Empty is fine (Jotform's own "required" setting handles that); a partly
 // filled address needs at least street, city and country.
 function isValid() {
-  if (!currentValue()) return true;
+  if (!formattedAddress()) return true;
   return !!(fieldValue(FIELDS[0]) && fieldValue(FIELDS[2]) && fieldValue(FIELDS[5]));
+}
+
+// Each part also goes into the form field with the same label (plus the optional
+// columnPrefix), e.g. a hidden Short Text field labelled "City". Those fields
+// become separate columns in submissions. Fields that don't exist are ignored.
+function fillColumns() {
+  if (!inJotform || !JFCustomWidget.setFieldsValueByLabel) return;
+  try {
+    JFCustomWidget.setFieldsValueByLabel(FIELDS.map(function (f) {
+      return { label: columnPrefix + f.label, value: fieldValue(f) };
+    }));
+  } catch (e) {
+    if (window.console) console.warn("Couldn't fill the address columns:", e);
+  }
 }
 
 function pushToForm() {
   if (!inJotform) return;
+  if (formattedAddress()) restoredValue = "";   // a new address replaces the saved one
   JFCustomWidget.sendData({ value: currentValue() });
+  fillColumns();
 }
 
 function resizeFrame() {
@@ -240,11 +266,14 @@ function applySettings(settings) {
     document.querySelector('label[for="' + f.id + '"]').textContent = label;
   });
   document.getElementById("custom-css").textContent = get("customCSS");
+  columnPrefix = get("columnPrefix") ? get("columnPrefix") + " " : "";
   searchCountry = parseCountry(get("searchCountry"));
   searchScope = searchCountry ? "country" : "world";
 }
 
 // Refill the fields from a saved value (e.g. editing a submission)
+// Saved by an earlier version as "Label: value" lines: refill the fields.
+// Saved as one formatted line: keep it as is (see currentValue).
 function restore(value) {
   var any = false;
   String(value).split("\n").forEach(function (line) {
@@ -256,7 +285,12 @@ function restore(value) {
       if (f.label === label || (f.oldLabels || []).indexOf(label) !== -1) { f.el.value = cleanText(v); any = true; }
     });
   });
-  if (any) showFields(true);
+  if (any) {
+    showFields(true);
+    return;
+  }
+  restoredValue = String(value).trim();
+  if (restoredValue) input.placeholder = restoredValue;   // shows the saved address
 }
 
 function setupJotform() {
@@ -267,6 +301,7 @@ function setupJotform() {
     applySettings(settings);
     if (formData && formData.value) restore(formData.value);
     JFCustomWidget.subscribe("submit", function () {
+      fillColumns();
       JFCustomWidget.sendSubmit({ valid: isValid(), value: currentValue() });
     });
     resizeFrame();
