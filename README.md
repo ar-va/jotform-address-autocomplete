@@ -123,6 +123,12 @@ Google errors are logged by the Worker (`Google Places … failed: <status> <mes
 - The iframe and same-origin checks stop casual use and stop other websites from embedding the widget. Request headers can be faked by scripts, though, and any Jotform account that knows your URL could embed it. Keep the Google quota cap in place.
 - Google requires the "Powered by Google" note in the suggestion list. Keep it.
 
+## Support
+
+If this widget saved you time, you can buy me a coffee:
+
+[![Support me on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/U7P1293ZXN)
+
 ## License
 
 [MIT](LICENSE)
