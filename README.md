@@ -1,6 +1,6 @@
 # Jotform Address Autocomplete Widget
 
-A Jotform custom widget that finds addresses as you type (Google Places) and then splits the chosen address into standard fields: Street Address, Line 2, City, State / Province, Postal / Zip Code, and Country. It runs on Cloudflare Workers, which also calls Google on the widget's behalf, so **your Google API key never reaches the browser**.
+A Jotform custom widget that finds addresses as you type (Google Places) and then splits the chosen address into standard fields: Street Address, Line 2, City, Province / State, Postal / Zip Code, and Country. It runs on Cloudflare Workers, which also calls Google on the widget's behalf, so **your Google API key never reaches the browser**.
 
 <img src="docs/screenshot.png" alt="Address search with suggestions grouped by country, above the filled-in address fields" width="560">
 
@@ -16,7 +16,7 @@ A Jotform custom widget that finds addresses as you type (Google Places) and the
   Street Address: 219 Dufferin Street
   Street Address Line 2: Unit 5
   City: Guelph
-  State / Province: Ontario
+  Province / State: Ontario
   Postal / Zip Code: N1H 4A9
   Country: Canada
   ```
