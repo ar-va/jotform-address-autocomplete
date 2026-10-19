@@ -5,6 +5,7 @@
 //   GET /                         the widget page, only inside a Jotform iframe
 //   GET /api/suggest?q=&session=  address suggestions, home country first
 //   GET /api/place?id=&session=   address parts for a picked suggestion
+//   GET /api/status               {"search":"ok"|"limited"} (Google quota used up)
 import { env } from "cloudflare:workers";
 
 // Sites allowed to embed the widget. Add a Jotform custom form domain here if you use one.
@@ -24,6 +25,15 @@ const SUGGEST_FIELDS = [
 
 const SESSION_RE = /^[0-9a-f-]{36}$/i;
 const PLACE_ID_RE = /^[A-Za-z0-9_-]{1,512}$/;
+// Characters an address search may contain: letters in any language (with
+// accents), digits, spaces and . , ' ’ # / & ( ) -. Same list as the widget.
+const QUERY_RE = /^[\p{L}\p{M}\p{N} .,'’#/&()-]{3,200}$/u;
+
+// When Google says the daily quota is used up, stop asking it for a while:
+// rejected calls are pointless, and the widget can switch to manual entry
+// straight away. Stored in this data centre's cache (not Google content).
+const QUOTA_PAUSE_SECONDS = 600;
+const QUOTA_FLAG_PATH = "/__quota-exhausted";
 
 // Sent with every response. The page allows scripts from Jotform's widget
 // library (which loads theme files and fonts itself), so script sources are
@@ -104,6 +114,21 @@ function isFromWidget(request: Request, url: URL): boolean {
 	return hostMatches(request.headers.get("Referer") ?? "", [url.hostname]);
 }
 
+class LookupError extends Error {}
+
+function quotaFlagKey(url: URL): Request {
+	return new Request(url.origin + QUOTA_FLAG_PATH);
+}
+
+async function quotaExhausted(url: URL): Promise<boolean> {
+	return (await caches.default.match(quotaFlagKey(url))) !== undefined;
+}
+
+async function markQuotaExhausted(url: URL): Promise<void> {
+	const flag = new Response("1", { headers: { "Cache-Control": `max-age=${QUOTA_PAUSE_SECONDS}` } });
+	await caches.default.put(quotaFlagKey(url), flag);
+}
+
 async function google<T>(path: string, init: { method: "GET" | "POST"; body?: unknown; fieldMask: string }): Promise<T> {
 	const headers: Record<string, string> = {
 		"X-Goog-Api-Key": env.GOOGLE_MAPS_API_KEY,
@@ -119,7 +144,7 @@ async function google<T>(path: string, init: { method: "GET" | "POST"; body?: un
 	if (!res.ok) {
 		// Shows up in the Worker's logs; the browser only gets a generic error.
 		console.error(`Google Places ${path.split("?")[0]} failed: ${res.status} ${await res.text()}`);
-		throw new Error("lookup_failed");
+		throw new LookupError(res.status === 429 ? "quota_exceeded" : "lookup_failed");
 	}
 	return res.json<T>();
 }
@@ -162,7 +187,11 @@ function homeRegion() {
 async function suggest(input: string, session: string) {
 	const { code, name, matcher } = homeRegion();
 	const results = await Promise.allSettled([autocomplete(input, session, code), autocomplete(input, session)]);
-	if (results.every((r) => r.status === "rejected")) throw new Error("lookup_failed");
+	const failures = results.flatMap((r) => (r.status === "rejected" ? [r.reason] : []));
+	if (failures.some((e) => e instanceof LookupError && e.message === "quota_exceeded")) {
+		throw new LookupError("quota_exceeded");
+	}
+	if (failures.length === results.length) throw new LookupError("lookup_failed");
 	const [home, world] = results.map((r) => (r.status === "fulfilled" ? r.value : []));
 
 	const seen = new Set<string>();
@@ -226,13 +255,18 @@ async function serveApi(request: Request, url: URL): Promise<Response> {
 		return json({ error: "not_configured" }, 503);
 	}
 
+	// Lets the widget switch to manual entry on load, without asking Google.
+	const paused = await quotaExhausted(url);
+	if (url.pathname === "/api/status") return json({ search: paused ? "limited" : "ok" });
+	if (paused) return json({ error: "quota_exceeded" }, 503);
+
 	const session = url.searchParams.get("session") ?? "";
 	if (!SESSION_RE.test(session)) return json({ error: "bad_request" }, 400);
 
 	try {
 		if (url.pathname === "/api/suggest") {
 			const q = (url.searchParams.get("q") ?? "").trim();
-			if (q.length < 3 || q.length > 200) return json({ error: "bad_request" }, 400);
+			if (!QUERY_RE.test(q)) return json({ error: "bad_request" }, 400);
 			return json(await suggest(q, session));
 		}
 		if (url.pathname === "/api/place") {
@@ -241,6 +275,10 @@ async function serveApi(request: Request, url: URL): Promise<Response> {
 			return json(await placeParts(id, session));
 		}
 	} catch (err) {
+		if (err instanceof LookupError && err.message === "quota_exceeded") {
+			await markQuotaExhausted(url);
+			return json({ error: "quota_exceeded" }, 503);
+		}
 		if (err instanceof Error && err.name === "TimeoutError") console.error("Google Places timed out");
 		return json({ error: "lookup_failed" }, 502);
 	}

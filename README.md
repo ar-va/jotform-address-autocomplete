@@ -127,12 +127,14 @@ What protects what:
 - **Widget page:** served only inside an iframe on `jotform.com` (`Sec-Fetch-Dest` check plus a `frame-ancestors` policy). Direct visits get 403. It also sends `nosniff`, `Referrer-Policy: same-origin`, a Permissions-Policy, and a CSP that blocks plugins, `<base>` tags and form posts.
 - **Lookup API:** GET only, same-origin requests only, strict input checks (query length, session-token and place-ID formats), generic error messages, no caching, and a per-visitor rate limit. Google errors are logged server-side with query strings redacted, since they contain what people type.
 - **Address text:** suggestions and labels are inserted as plain text, never as HTML, so a crafted address can't run code in the widget.
+- **Allowed characters:** the search bar and fields accept only letters in any language (with accents), digits, spaces and `. , ' ’ # / & ( ) -`, up to 200 characters for search and 100 per field. Anything else is removed as it's typed or pasted, and the server rejects searches containing it. Saved values never start with `-`, so spreadsheets can't read an address as a formula.
+- **Lookup limits:** when Google reports the daily quota is used up, the Worker stops calling Google for 10 minutes. The widget hides search, tells the person the limit is reached and opens the fields for manual entry. It checks this on load (`/api/status`, which doesn't use any Google quota) and whenever a search or the per-visitor rate limit fails.
 
 Known limits:
 
 - Header checks can be faked by scripts, and any Jotform account that knows your URL can embed the widget. The rate limit slows a single visitor down; many visitors working together could still use up the daily Google quota. **The quota cap is your hard cost limit.** If search stops working, check the Worker's logs for Google `429` errors.
 - Script sources aren't restricted by the CSP, because Jotform's widget library loads its own theme scripts and fonts at runtime.
-- Submitted addresses come from the respondent's browser, like any form field, so treat them as unverified input. If you export submissions to a spreadsheet, a value starting with `=`, `+`, `-` or `@` could be read as a formula.
+- Submitted addresses come from the respondent's browser, like any form field, so treat them as unverified input. Someone could bypass the widget's character rules with developer tools; the cleaning protects honest users and the spreadsheet case, not Jotform's own storage.
 - Google requires the "Powered by Google" note in the suggestion list. Keep it. Google's terms also don't allow caching suggestions, which is why nothing is cached.
 
 ## Support
