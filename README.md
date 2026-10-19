@@ -1,3 +1,5 @@
+<img src="docs/icon-512.png" alt="" width="96" align="right">
+
 # Jotform Address Autocomplete Widget
 
 An address field for [Jotform](https://www.jotform.com) forms. People start typing their address, pick it from Google's suggestions, and the widget fills in the standard address fields for them: street, unit, city, province or state, postal code and country.
@@ -132,12 +134,13 @@ When you see **Deploy complete**, your widget is live, and the Google key is sto
 
 | Field | What to enter |
 | --- | --- |
-| **Widget Icon**, **Widget Demo Screenshots** | Optional. You can use [`docs/screenshot.png`](docs/screenshot.png) as a screenshot. |
+| **Widget Icon** | Optional. Upload [`docs/icon-80.png`](docs/icon-80.png) (80×80). |
+| **Widget Demo Screenshots** | Optional. You can use [`docs/screenshot.png`](docs/screenshot.png). |
 | **Name** | Anything you'll recognise, e.g. `Address Autocomplete` |
 | **Short Description**, **Description** | Optional, for your own reference |
 | **Demo URL**, **Video URL** | Leave empty |
-| **Categories** | Any category |
-| **Widget Type** | The type that loads a web page by its address (an iframe or URL type). In the field for the widget's URL, enter your widget address, e.g. `https://address.example.com/` |
+| **Categories** | **Mapping** |
+| **Widget Type** | **iFrame Widget**. In the URL field that comes with it, enter your widget address, e.g. `https://address.example.com/` |
 | **Static Widget** | **Leave unticked.** Ticked, the widget wouldn't save the address to the form. |
 | **Accessible Widget (A11Y)** | Optional |
 | **Multiple Instance** | Tick it if you want more than one address on the same form, e.g. billing and shipping |

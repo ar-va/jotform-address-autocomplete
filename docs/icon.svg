@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4a86ff"/>
+      <stop offset="1" stop-color="#1d4ed8"/>
+    </linearGradient>
+    <linearGradient id="hole" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3f7bff"/>
+      <stop offset="1" stop-color="#2557e0"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#0b2a7a" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="116" fill="url(#bg)"/>
+
+  <!-- Address field card -->
+  <rect x="104" y="318" width="304" height="118" rx="30" fill="#ffffff" fill-opacity="0.2"/>
+  <rect x="140" y="384" width="148" height="16" rx="8" fill="#ffffff" fill-opacity="0.95"/>
+  <rect x="140" y="410" width="92" height="12" rx="6" fill="#ffffff" fill-opacity="0.6"/>
+
+  <!-- Map pin dropping into the field -->
+  <g filter="url(#shadow)">
+    <path d="M256 366 C256 366 166 274 166 200 A90 90 0 1 1 346 200 C346 274 256 366 256 366 Z" fill="#ffffff"/>
+  </g>
+  <circle cx="256" cy="198" r="36" fill="url(#hole)"/>
+</svg>
