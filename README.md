@@ -1,16 +1,30 @@
 # Jotform Address Autocomplete Widget
 
-A Jotform custom widget that finds addresses as you type (Google Places) and then splits the chosen address into standard fields: Street Address, Line 2, City, Province / State, Postal / Zip Code, and Country. It runs on Cloudflare Workers, which also calls Google on the widget's behalf, so **your Google API key never reaches the browser**.
+An address field for [Jotform](https://www.jotform.com) forms. People start typing their address, pick it from Google's suggestions, and the widget fills in the standard address fields for them: street, unit, city, province or state, postal code and country.
 
-<img src="docs/screenshot.png" alt="Address search showing Canadian suggestions and a Not in Canada? Search all countries link, above the filled-in address fields" width="560">
+You host it yourself, for free, on Cloudflare. Your Google key stays private on Cloudflare's side and never appears in your form.
 
-## Features
+<img src="docs/screenshot.png" alt="The widget: a search bar showing Canadian address suggestions and a Not in Canada? Search all countries link, above the filled-in address fields" width="560">
 
-- One search bar that searches everywhere, or one country if you pick one per form. With a country set, a "Not in Canada? Search all countries" link switches that visitor to worldwide suggestions, and back. Each search makes a single Google request.
-- Picking a suggestion fills editable fields laid out like Jotform's built-in Address field. A "Can't find it? Enter address manually" link covers addresses Google doesn't know.
-- Colours, font, sizes and labels are set from Jotform widget parameters, with no code changes. A `customCSS` parameter covers anything else.
-- The Google key is stored as a Cloudflare secret. The widget page and its lookup API only respond inside a Jotform iframe.
-- Saved submissions are readable text and load back into the fields when a submission is edited:
+## Contents
+
+- [What it does](#what-it-does)
+- [What you need](#what-you-need)
+- [Setup, step by step](#setup-step-by-step)
+- [Customise the look and wording](#customise-the-look-and-wording)
+- [Troubleshooting](#troubleshooting)
+- [Updating your widget later](#updating-your-widget-later)
+- [Costs and limits](#costs-and-limits)
+- [Security](#security)
+- [For developers](#for-developers)
+
+## What it does
+
+- **Search as you type.** Suggestions come from Google Maps. You can limit searches to one country (for example Canada), with a "Not in Canada? Search all countries" link for visitors from elsewhere, or search the whole world.
+- **Fills in the address for you.** Picking a suggestion fills editable fields laid out like Jotform's own Address field. A "Can't find it? Enter address manually" link is always there.
+- **Matches your form.** Colours, font, sizes and labels are set from Jotform's widget settings, with no code changes.
+- **Keeps working when limits are reached.** If the daily Google limit runs out, the widget says so and switches to manual entry instead of failing silently.
+- **Readable submissions.** Each entry is saved like this, and loads back into the fields if you edit a submission:
 
   ```
   Street Address: 219 Dufferin Street
@@ -21,121 +35,257 @@ A Jotform custom widget that finds addresses as you type (Google Places) and the
   Country: Canada
   ```
 
-## How it works
+## What you need
 
-```
-Jotform form ──iframe──▶ your-domain/            widget page (public/index.html)
-                              │
-                              └─ fetch ──▶ your-domain/api/suggest   ─┐
-                                           your-domain/api/place     ─┴─▶ Google Places API (New)
-                                           (Cloudflare Worker, src/index.ts, holds the key)
-```
+| | What for | Cost |
+| --- | --- | --- |
+| A **Jotform** account | Where your forms live | Free plan works |
+| A **Cloudflare** account | Hosts the widget | Free plan works |
+| A **domain on Cloudflare** (for example `example.com`) | Gives the widget an address like `address.example.com`. No domain? See the note in [step 4](#4-tell-the-project-your-address). | You may already have one |
+| A **Google Cloud** account with **billing turned on** | Address suggestions from Google Maps | Google includes a monthly free allowance; see [Costs and limits](#costs-and-limits) |
+| A computer with **Node.js 22.18 or newer** | To upload the widget to Cloudflare | Free, from [nodejs.org](https://nodejs.org) (choose the LTS version) |
 
-## Setup
+Plan for about 30–45 minutes the first time. You'll type a few commands into a **terminal**: on a Mac open the **Terminal** app; on Windows open **PowerShell**. Type or paste each command, then press Enter.
 
-You need:
+## Setup, step by step
 
-- A Cloudflare account with a domain on it, for example `address.example.com`.
-- A Google Cloud project with **billing enabled** and **Places API (New)** enabled.
-- Node.js 22.18 or later, and the [Cloudflare CLI](https://developers.cloudflare.com/cf/) (`npm install --global cf`, then `cf auth login`).
+### 1. Download the project
 
-### 1. Get the code
+Easiest: on this page click the green **Code** button → **Download ZIP**, then unzip it somewhere you'll find it again, such as your Documents folder.
+
+(If you use Git: `git clone https://github.com/ar-va/jotform-address-autocomplete-google-maps.git`)
+
+### 2. Install the tools
+
+In the terminal, go into the project folder. Type `cd` followed by a space, drag the unzipped folder onto the terminal window, and press Enter. Then run:
 
 ```sh
-git clone https://github.com/ar-va/jotform-address-autocomplete-google-maps.git
-cd jotform-address-autocomplete-google-maps
 npm install
+npm install --global cf
+cf auth login
 ```
 
-### 2. Configure
+- `npm install` downloads what the project needs. Warnings are normal.
+- `npm install --global cf` installs Cloudflare's command-line tool, `cf`.
+- `cf auth login` opens your browser so you can sign in to Cloudflare and allow access.
 
-In `cloudflare.config.ts`:
+### 3. Get a Google Maps key
 
-- `name`: any Worker name.
-- `domains`: the address Jotform will load the widget from, on a domain in your Cloudflare account.
-- `API_RATE_LIMIT`: address lookups allowed per visitor per minute (default 30). A person filling in the form uses about 2–10.
+In the [Google Cloud console](https://console.cloud.google.com):
 
-In `src/index.ts`, `ALLOWED_HOSTS` lists the sites allowed to embed the widget. The default `jotform.com` covers `form.jotform.com`, `eu.jotform.com` and the form builder. Add your own domain if your forms use a Jotform custom domain.
+1. Create or choose a project, and make sure **billing** is turned on for it (**Billing** in the left menu).
+2. Go to **APIs & Services → Library**, search for **Places API (New)** and click **Enable**.
+3. Go to **APIs & Services → Credentials → Create credentials → API key**. Then edit the key:
+   - **API restrictions:** choose **Restrict key** and tick only **Places API (New)**.
+   - **Application restrictions:** **None**. That's safe here: only your Cloudflare server uses the key, and it's never shown to visitors.
+4. Recommended: **APIs & Services → Places API (New) → Quotas**, lower the **per day** limits (for example to 500). That caps your possible bill.
 
-### 3. Create a Google key for the server
+Copy the key; you'll need it in step 5.
 
-In Google Cloud → APIs & Services → Credentials, create an API key:
+### 4. Tell the project your address
 
-- **API restrictions:** Places API (New) only.
-- **Application restrictions:** None. The key is used from Cloudflare's servers, which have no fixed IP or website to restrict to. It's never sent to browsers.
-- Recommended: set a daily request cap under Places API (New) → Quotas, so unexpected traffic can't run up a bill.
+Open the file `cloudflare.config.ts` in any text editor (TextEdit, Notepad, VS Code) and change two lines:
 
-Copy `.dev.vars.example` to `.dev.vars` and paste the key in. `.dev.vars` is git-ignored; never commit it.
+```ts
+name: "jotform-address-autocomplete-google-maps",   // ← any name you like (lowercase, dashes)
+domains: ["address.example.com"],                  // ← your own address, e.g. "address.example.com"
+```
 
-### 4. Deploy
+The address must be on a domain that's in your Cloudflare account. Cloudflare creates it for you on the first upload. You don't need to set up DNS.
+
+> **No domain?** You can use a free `workers.dev` address instead. In the Cloudflare dashboard open **Workers & Pages** and pick your `workers.dev` subdomain if asked. Then, in `cloudflare.config.ts`, delete the `domains: [...]` line and change `workersDev: false` to `workersDev: true`. Your widget address will be shown after the upload in step 6.
+
+**Only if your forms use your own domain** (a Jotform custom domain such as `forms.example.com`, instead of `form.jotform.com`): open `src/index.ts` and add it to the `ALLOWED_HOSTS` list near the top, like `["jotform.com", "example.com"]`. Otherwise leave that file alone.
+
+### 5. Add your Google key
+
+In the project folder there's a file called `.dev.vars.example`. Make a copy of it called `.dev.vars`:
+
+```sh
+cp .dev.vars.example .dev.vars        # Mac
+copy .dev.vars.example .dev.vars      # Windows
+```
+
+Open `.dev.vars` in a text editor and paste your key right after the `=` sign, with no spaces or quotes:
+
+```
+GOOGLE_MAPS_API_KEY=AIzaSy...your-key...
+```
+
+Save it. Files starting with a dot are hidden on Mac; in Finder press **Cmd + Shift + .** to show them. This file stays on your computer and is never shared, even if you publish your copy of the project.
+
+### 6. Upload the widget to Cloudflare
 
 ```sh
 cf deploy --secrets-file .dev.vars
 ```
 
-This uploads the widget and the Worker, stores the key as a Cloudflare secret, and serves it on your domain. Later deploys can run plain `cf deploy` unless the key changes.
+When you see **Deploy complete**, your widget is live, and the Google key is stored securely in Cloudflare.
 
-Opening the URL directly in a browser shows **Forbidden**. That's expected; it only loads inside a Jotform form.
+**Check it:** open your widget address (for example `https://address.example.com`) in a browser. You should see **Forbidden**. That's correct: the widget only works inside a Jotform form. A brand-new address can take a few minutes to start working.
 
-### 5. Add it to Jotform
+### 7. Create the widget in Jotform
 
-Create a custom widget in Jotform's widget developer area, set its URL to your domain (`https://address.example.com/`), and add it to a form. Add any of the optional parameters below as user parameters.
+1. Open Jotform's **widget developer** area and create a new custom widget. (If you can't find it, search "Jotform create custom widget" in Jotform's help.)
+2. Set the widget's **URL** to your widget address, for example `https://address.example.com/`.
+3. Optional: add the settings you want to control from Jotform (colours, labels, country) as **User Parameters**. Each one is listed in [Customise the look and wording](#customise-the-look-and-wording).
+4. To keep the widget private to your account, leave **Under Review** ticked and **Disabled** unticked in its status options.
 
-## Widget parameters
+### 8. Add it to a form
 
-All parameters are optional. Leave one out or blank to keep the default. Sizes take a plain number (pixels) or any CSS length.
+In the form builder, add your widget like any other field and give it a label such as "Home Address". Open the form's preview, type an address, and pick a suggestion. Done!
 
-| Parameter | What it changes | Default |
-| --- | --- | --- |
-| `accentColor` | Focus outline, links | `#2e69ff` |
-| `textColor` | Typed text | `#2c3345` |
-| `labelColor` | Small labels under fields, hints | `#6c7389` |
-| `borderColor` | Field borders | `#c3cad8` |
-| `fieldBackground` | Field and dropdown background | `#ffffff` |
-| `highlightColor` | Highlighted suggestion | `#eef3ff` |
-| `fontFamily` | Font | Inter, system font |
-| `fontSize` | Text size | `15` |
-| `fieldHeight` | Field height | `40` |
-| `cornerRadius` | Field corner rounding | `4` |
-| `searchPlaceholder` | Search bar hint | Search for your address |
-| `manualLinkText` | Manual-entry link | Can't find it? Enter address manually |
-| `labelStreet`, `labelLine2`, `labelCity`, `labelProvince`, `labelPostal`, `labelCountry` | Field labels. These also name the lines in the submitted value. | Street Address, … |
-| `searchCountry` | Country searched by default. Add it as a **Dropdown** parameter and paste the options from [`docs/countries.txt`](docs/countries.txt) (`All countries`, then `Canada (CA)`, …). A plain name (`Canada`) or two-letter code (`ca`) also works. Visitors can still switch to all countries. | everywhere |
-| `customCSS` | Extra CSS added to the widget, e.g. `.field label { font-weight: 600 }`. Jotform's widget library applies a setting with this name too, so the widget's Custom CSS tab may work the same way. | empty |
+## Customise the look and wording
 
-The widget can't read your form's theme automatically (browsers keep an iframe from another site apart from the page around it), so set the colours to match your form's Form Designer.
+Each setting below is a **User Parameter** you add to your widget in Jotform's widget developer area (step 7). Once added, you change its value per form in the widget's **Settings → General** tab. Every one is optional: anything you don't add, or leave empty, keeps the default.
 
-## Local development
+When adding a parameter, fill in:
+
+- **Name:** exactly as in the table. Capital letters matter.
+- **Human Readable Name:** any label you like; it's what you'll see in the settings panel.
+- **Field Type:** as in the table.
+- **Default Value:** see the table. Leave **Conditional Rendering** empty.
+
+| Name | What it changes | Field Type | Default Value |
+| --- | --- | --- | --- |
+| `searchCountry` | Country searched first. As its options, paste the list from [`docs/countries.txt`](docs/countries.txt). Visitors can still switch to all countries. | Dropdown | `All countries` (search everywhere) or e.g. `Canada (CA)` |
+| `accentColor` | Highlight around the active field, links | Color | `#2e69ff` |
+| `textColor` | Typed text | Color | `#2c3345` |
+| `labelColor` | Small labels under the fields | Color | `#6c7389` |
+| `borderColor` | Field borders | Color | `#c3cad8` |
+| `fieldBackground` | Inside of the fields | Color | `#ffffff` |
+| `highlightColor` | Suggestion under the mouse | Color | `#eef3ff` |
+| `fontFamily` | Font, e.g. `Inter, sans-serif` | Text | leave empty |
+| `fontSize` | Text size in pixels, e.g. `15` | Text | leave empty |
+| `fieldHeight` | Field height in pixels, e.g. `40` | Text | leave empty |
+| `cornerRadius` | Field corner rounding in pixels, e.g. `4` | Text | leave empty |
+| `searchPlaceholder` | Hint in the search bar | Text | leave empty |
+| `manualLinkText` | "Can't find it? Enter address manually" | Text | leave empty |
+| `labelStreet` `labelLine2` `labelCity` `labelProvince` `labelPostal` `labelCountry` | The labels under each field, e.g. for another language | Text | leave empty |
+| `customCSS` | Anything else, as CSS, e.g. `.field label { font-weight: 600 }` | Textarea | leave empty |
+
+Tips:
+
+- **Colour settings say "undefined"?** Jotform only applies Default Values when the widget is added to a form. Delete the widget from the form and add it again. Do this before you collect real submissions.
+- **Matching your form's colours:** the widget can't read your form's theme by itself, so copy the colours from your form's **Form Designer** into the colour settings.
+- **Changing labels after collecting submissions:** the labels also name the lines in saved entries. Old entries with the old labels won't fill back into the fields when edited.
+
+## Troubleshooting
+
+**Opening the widget address shows "Forbidden".**
+That's normal. The widget only loads inside a Jotform form. Test it through your form's preview.
+
+**No suggestions appear, or the form says "Address search has reached its limit for now".**
+Most often Google's daily limit is used up. Check **Google Cloud → APIs & Services → Places API (New) → Quotas**. The limit resets at midnight Pacific Time. You can raise it there; that needs billing turned on. Also check that **billing** is active and **Places API (New)** is enabled. For the exact reason, open the **Cloudflare dashboard → Workers & Pages → your widget → Observability** and look for `Google Places … failed` messages.
+
+**The upload (`cf deploy`) fails.**
+Read the message:
+
+- "workers.dev subdomain": use a domain in `domains` (step 4), or pick a `workers.dev` subdomain in the Cloudflare dashboard.
+- Anything about the domain: check it's spelled correctly and that the domain is in your Cloudflare account.
+- Not signed in: run `cf auth login` again.
+
+**Search worked, then stopped after I changed my Google key.**
+Put the new key in `.dev.vars` and run `cf deploy --secrets-file .dev.vars` again.
+
+**The widget looks cut off or too tall in the form.**
+It resizes itself as you use it. If it doesn't, check that the widget's URL in Jotform is exactly your widget address.
+
+## Updating your widget later
+
+After changing any file (including downloading a newer version of this project), upload again from the project folder:
+
+```sh
+cf deploy
+```
+
+Your Google key stays stored in Cloudflare, so you only need `--secrets-file .dev.vars` when the key changes.
+
+<details>
+<summary><strong>Optional: deploy automatically from your own GitHub copy</strong></summary>
+
+If you keep your copy of the project on GitHub, Cloudflare can redeploy whenever you push changes:
+
+1. Cloudflare dashboard → **Workers & Pages** → your widget → **Settings → Builds → Connect**.
+2. Choose GitHub and give access to **only that repository**.
+3. Branch `main`, **Build command** empty, **Deploy command** `npx cf deploy`, **Preview builds** off.
+
+Your Google key stays in Cloudflare; never put it in the repository.
+
+</details>
+
+## Costs and limits
+
+- **Cloudflare:** the free plan is enough for a form widget.
+- **Google:** each search a visitor makes (they search as they type) is one request, and picking an address is one more. A typical visitor uses about 2–5 searches. Google includes a monthly free allowance for Places API (New), but pricing changes, so check [Google Maps Platform pricing](https://mapsplatform.google.com/pricing/). **Set a daily quota** (step 3) so a surprise can't run up a bill. For example, 100 requests a day covers roughly 20–50 visitors.
+- **Per-visitor limit:** each visitor can make up to 30 lookups a minute, so one person (or a script) can't use up your quota. Change it in `cloudflare.config.ts` (`API_RATE_LIMIT`).
+
+## Security
+
+In short:
+
+- **Your Google key is never exposed.** It's stored as a Cloudflare secret and used only by your Cloudflare server. It isn't in the widget, the form or this repository.
+- **The widget only runs inside Jotform forms.** Opening it directly, or embedding it on another website, is blocked.
+- **Typing is filtered.** The fields accept letters (any language, with accents), numbers, spaces and `. , ' ’ # / & ( ) -`. Anything else is removed, so pasted code or spreadsheet formulas can't sneak into submissions. The server double-checks searches.
+- **Abuse is limited.** The per-visitor limit and your Google daily quota cap how much anyone can use. When a limit is reached, visitors simply enter their address by hand.
+
+<details>
+<summary><strong>Details for technical readers</strong></summary>
+
+- **Widget page:** served only for `Sec-Fetch-Dest: iframe` (with a `jotform.com` Referer fallback for older browsers) and a CSP `frame-ancestors` restricted to `jotform.com`. Direct visits get 403, and only GET/HEAD is allowed. It also sends `nosniff`, `Referrer-Policy: same-origin`, a Permissions-Policy, and a CSP blocking plugins, `<base>` and form posts. Script sources aren't restricted, because Jotform's widget library loads its own theme scripts and fonts at runtime.
+- **Lookup API:** GET only and same-origin only (`Sec-Fetch-Site`). Strict checks on query characters and length, session-token and place-ID format, and country codes. Generic error messages, `Cache-Control: no-store`, and a per-IP rate limit (Workers rate-limiting binding). Google calls time out after 5 s.
+- **Quota handling:** on a Google 429 the Worker stores a 10-minute flag in the Cache API and answers `quota_exceeded` without calling Google. `/api/status` lets the widget switch to manual entry on load without using quota.
+- **Output:** suggestions and labels are inserted with `textContent`, never as HTML. Saved values never start with `-`.
+- **Logging:** Google errors are logged server-side with query strings redacted, since they contain what people type.
+- **Known limits:** headers can be forged by scripts, and any Jotform account that knows your URL can embed the widget. The rate limit slows a single source down; distributed abuse is capped by your Google quota. Submissions come from the visitor's browser like any form field, so treat them as unverified input.
+- **Google terms:** keep the "Powered by Google" note in the suggestion list. Suggestions aren't cached, because Google's terms don't allow it.
+
+</details>
+
+## For developers
+
+<details>
+<summary><strong>How it works, project layout and local development</strong></summary>
+
+```
+Jotform form ──iframe──▶ your-domain/              widget page (public/index.html)
+                              │
+                              ├─ fetch ──▶ /api/status     quota state, no Google call
+                              ├─ fetch ──▶ /api/suggest    ─┐
+                              └─ fetch ──▶ /api/place      ─┴─▶ Google Places API (New)
+                                           Cloudflare Worker (src/index.ts) holds the key
+```
+
+| File | What it is |
+| --- | --- |
+| `public/index.html` | The widget page: HTML, CSS and JavaScript in one file, no build step |
+| `src/index.ts` | The Cloudflare Worker: page gating, lookup API, Google calls |
+| `cloudflare.config.ts` | Worker name, domain, bindings (assets, secret, rate limit) |
+| `docs/countries.txt` | Options for the `searchCountry` dropdown |
+| `.dev.vars.example` | Template for the local secrets file |
+
+API:
+
+- `GET /api/suggest?q=&session=&country=&scope=` returns `{ country, countryName, scope, groups: [{ label, items: [{ id, main, secondary, text }] }] }`. `country` is a two-letter code, or omitted to search everywhere; `scope=world` searches everywhere even with a country set.
+- `GET /api/place?id=&session=` returns `{ streetNumber, route, unit, city, province, postalCode, country }`.
+- `GET /api/status` returns `{ search: "ok" | "limited" }`.
+- Errors return `{ error }`, one of `bad_request`, `forbidden`, `rate_limited`, `quota_exceeded`, `lookup_failed`, `not_configured`.
+
+Run locally (uses the key in `.dev.vars`):
 
 ```sh
 cf dev
 ```
 
-The widget page still returns Forbidden when opened directly. To call the API locally, send `Sec-Fetch-Site: same-origin`, for example:
+The page still returns 403 when opened directly. To call the API, send the header a browser would:
 
 ```sh
-curl -H 'Sec-Fetch-Site: same-origin' 'http://localhost:5173/api/suggest?q=219+dufferin&session=11111111-2222-4333-8444-555555555555'
+curl -H 'Sec-Fetch-Site: same-origin' 'http://localhost:5173/api/suggest?q=219+dufferin&country=ca&session=11111111-2222-4333-8444-555555555555'
 ```
 
-Google errors are logged by the Worker (`Google Places … failed: <status> <message>`). After deploying, view them in the Cloudflare dashboard under the Worker's logs.
+Type-check with `npx tsc --noEmit`.
 
-## Security
-
-What protects what:
-
-- **Google key:** stored as a Cloudflare secret and only used by the Worker. It never appears in the page, the repo or the browser. Restrict it to Places API (New) and set a daily quota.
-- **Widget page:** served only inside an iframe on `jotform.com` (`Sec-Fetch-Dest` check plus a `frame-ancestors` policy). Direct visits get 403. It also sends `nosniff`, `Referrer-Policy: same-origin`, a Permissions-Policy, and a CSP that blocks plugins, `<base>` tags and form posts.
-- **Lookup API:** GET only, same-origin requests only, strict input checks (query length, session-token and place-ID formats), generic error messages, no caching, and a per-visitor rate limit. Google errors are logged server-side with query strings redacted, since they contain what people type.
-- **Address text:** suggestions and labels are inserted as plain text, never as HTML, so a crafted address can't run code in the widget.
-- **Allowed characters:** the search bar and fields accept only letters in any language (with accents), digits, spaces and `. , ' ’ # / & ( ) -`, up to 200 characters for search and 100 per field. Anything else is removed as it's typed or pasted, and the server rejects searches containing it. Saved values never start with `-`, so spreadsheets can't read an address as a formula.
-- **Lookup limits:** when Google reports the daily quota is used up, the Worker stops calling Google for 10 minutes. The widget hides search, tells the person the limit is reached and opens the fields for manual entry. It checks this on load (`/api/status`, which doesn't use any Google quota) and whenever a search or the per-visitor rate limit fails.
-
-Known limits:
-
-- Header checks can be faked by scripts, and any Jotform account that knows your URL can embed the widget. The rate limit slows a single visitor down; many visitors working together could still use up the daily Google quota. **The quota cap is your hard cost limit.** If search stops working, check the Worker's logs for Google `429` errors.
-- Script sources aren't restricted by the CSP, because Jotform's widget library loads its own theme scripts and fonts at runtime.
-- Submitted addresses come from the respondent's browser, like any form field, so treat them as unverified input. Someone could bypass the widget's character rules with developer tools; the cleaning protects honest users and the spreadsheet case, not Jotform's own storage.
-- Google requires the "Powered by Google" note in the suggestion list. Keep it. Google's terms also don't allow caching suggestions, which is why nothing is cached.
+</details>
 
 ## Support
 
@@ -145,4 +295,4 @@ If this widget saved you time, you can buy me a coffee:
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE): free to use, change and share.
