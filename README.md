@@ -6,7 +6,7 @@ An address field for [Jotform](https://www.jotform.com) forms. People start typi
 
 You host it yourself, for free, on Cloudflare. Your Google key stays private on Cloudflare's side and never appears in your form.
 
-<img src="docs/screenshot.png" alt="The widget: a search bar showing Canadian address suggestions and a Not in Canada? Search all countries link, above the filled-in address fields" width="560">
+<img src="docs/demo.gif" alt="Demo: typing 219 dufferin st toronto, picking the Toronto suggestion, the address fields filling in, then typing Unit 206B into Line 2" width="560">
 
 ## Contents
 
