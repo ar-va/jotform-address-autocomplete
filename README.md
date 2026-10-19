@@ -126,10 +126,29 @@ When you see **Deploy complete**, your widget is live, and the Google key is sto
 
 ### 7. Create the widget in Jotform
 
-1. Open Jotform's **widget developer** area and create a new custom widget. (If you can't find it, search "Jotform create custom widget" in Jotform's help.)
-2. Set the widget's **URL** to your widget address, for example `https://address.example.com/`.
-3. Optional: add the settings you want to control from Jotform (colours, labels, country) as **User Parameters**. Each one is listed in [Customise the look and wording](#customise-the-look-and-wording).
-4. To keep the widget private to your account, leave **Under Review** ticked and **Disabled** unticked in its status options.
+1. Go to [jotform.com/widgets](https://www.jotform.com/widgets/), scroll down to **My Form Widgets** and click it.
+2. At the bottom right, click **Add New Widget**.
+3. Fill in the form:
+
+| Field | What to enter |
+| --- | --- |
+| **Widget Icon**, **Widget Demo Screenshots** | Optional. You can use [`docs/screenshot.png`](docs/screenshot.png) as a screenshot. |
+| **Name** | Anything you'll recognise, e.g. `Address Autocomplete` |
+| **Short Description**, **Description** | Optional, for your own reference |
+| **Demo URL**, **Video URL** | Leave empty |
+| **Categories** | Any category |
+| **Widget Type** | The type that loads a web page by its address (an iframe or URL type). In the field for the widget's URL, enter your widget address, e.g. `https://address.example.com/` |
+| **Static Widget** | **Leave unticked.** Ticked, the widget wouldn't save the address to the form. |
+| **Accessible Widget (A11Y)** | Optional |
+| **Multiple Instance** | Tick it if you want more than one address on the same form, e.g. billing and shipping |
+| **Required By Default** | Optional; you can change it on each form anyway |
+| **Default Label** | The question shown above the widget, e.g. `Home Address` |
+| **Question Label** | Tick it to show that label on the form |
+| **User Parameters** | Optional settings you can change per form (colours, labels, country). Click **Add Parameter** for each one; see [Customise the look and wording](#customise-the-look-and-wording). You can add them later. |
+| **Under Review** | **Leave ticked** to keep the widget private: only you (and Jotform's admins) can see and use it |
+| **Disabled** | Leave unticked |
+
+4. Click **Add**.
 
 ### 8. Add it to a form
 
@@ -137,7 +156,7 @@ In the form builder, add your widget like any other field and give it a label su
 
 ## Customise the look and wording
 
-Each setting below is a **User Parameter** you add to your widget in Jotform's widget developer area (step 7). Once added, you change its value per form in the widget's **Settings → General** tab. Every one is optional: anything you don't add, or leave empty, keeps the default.
+Each setting below is a **User Parameter** you add to your widget in Jotform (**My Form Widgets** → your widget → **Add Parameter**, see step 7). Once added, you change its value per form in the widget's **Settings → General** tab. Every one is optional: anything you don't add, or leave empty, keeps the default.
 
 When adding a parameter, fill in:
 
