@@ -14,10 +14,10 @@ A Jotform custom widget that finds addresses as you type (Google Places) and the
 
   ```
   Street Address: 219 Dufferin Street
-  Street Address Line 2: Unit 5
-  City: Guelph
+  Street Address Line 2: Unit 206B
+  City: Toronto
   Province / State: Ontario
-  Postal / Zip Code: N1H 4A9
+  Postal / Zip Code: M6K 3J1
   Country: Canada
   ```
 
