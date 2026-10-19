@@ -97,6 +97,8 @@ var STYLE_PARAMS = {
   cornerRadius:    "--radius"
 };
 var SIZE_PARAMS = { fontSize: true, fieldHeight: true, cornerRadius: true };
+// Values are checked against this CSS property; anything invalid keeps the default.
+var PARAM_CHECK = { fontFamily: "font-family", fontSize: "width", fieldHeight: "width", cornerRadius: "width" };
 // Text parameters: searchPlaceholder, manualLinkText, labelStreet, labelLine2,
 // labelCity, labelProvince, labelPostal, labelCountry. Plus customCSS.
 
@@ -154,15 +156,18 @@ function resizeFrame() {
 }
 
 function applySettings(settings) {
+  // Jotform shows unset parameters as "undefined" and may pass that text on
   function get(name) {
     var v = settings[name];
-    return v == null ? "" : String(v).trim();
+    v = v == null ? "" : String(v).trim();
+    return /^(undefined|null)$/i.test(v) ? "" : v;
   }
   var root = document.documentElement.style;
   Object.keys(STYLE_PARAMS).forEach(function (name) {
     var v = get(name);
     if (!v) return;
     if (SIZE_PARAMS[name] && /^\d+(\.\d+)?$/.test(v)) v += "px";
+    if (window.CSS && CSS.supports && !CSS.supports(PARAM_CHECK[name] || "color", v)) return;
     root.setProperty(STYLE_PARAMS[name], v);
   });
 
