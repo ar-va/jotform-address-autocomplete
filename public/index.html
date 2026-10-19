@@ -123,6 +123,7 @@ var field = {};
 FIELDS.forEach(function (f) { f.el = document.getElementById(f.id); field[f.key] = f.el; });
 
 var sessionToken = newSessionToken();
+var customPlaceholder = false;   // set when the searchPlaceholder parameter is used
 var currentItems = [];
 var activeIndex = -1;
 var requestSeq = 0;
@@ -172,7 +173,11 @@ function applySettings(settings) {
   });
 
   var placeholder = get("searchPlaceholder");
-  if (placeholder) { input.placeholder = placeholder; input.setAttribute("aria-label", placeholder); }
+  if (placeholder) {
+    customPlaceholder = true;
+    input.placeholder = placeholder;
+    input.setAttribute("aria-label", placeholder);
+  }
   if (get("manualLinkText")) manualBtn.textContent = get("manualLinkText");
   FIELDS.forEach(function (f) {
     var label = get(f.param);
@@ -221,8 +226,8 @@ function newSessionToken() {
 }
 
 function api(path, params) {
-  params.session = sessionToken;
-  var qs = Object.keys(params).map(function (k) { return k + "=" + encodeURIComponent(params[k]); }).join("&");
+  var qs = Object.keys(params).map(function (k) { return k + "=" + encodeURIComponent(params[k]); })
+    .concat("session=" + encodeURIComponent(sessionToken)).join("&");
   return fetch("/api/" + path + "?" + qs).then(function (res) {
     return res.json().catch(function () { return {}; }).then(function (body) {
       if (!res.ok) throw new Error(body.error || ("HTTP " + res.status));
@@ -231,11 +236,18 @@ function api(path, params) {
   });
 }
 
+// not_configured: the server has no Google key, so searching can't work at all.
+// Anything else (Google quota or outage, rate limit, network): keep the search
+// bar for a retry, but say so and open the fields so the form can still be filled.
 function handleLookupError(err) {
   if (window.console) console.warn("Address lookup failed:", err.message);
   if (err.message === "not_configured") {
     searchUnavailable("Address search is unavailable right now. Please type your address below.");
+    return;
   }
+  note.hidden = false;
+  note.textContent = "Address search isn't available right now. Please enter your address below.";
+  showFields(true);
 }
 
 function render(groups) {
@@ -300,7 +312,7 @@ function choose(i) {
   api("place", { id: item.suggestion.id }).then(function (parts) {
     fillFields(parts);
     input.value = "";
-    input.placeholder = "Search for a different address";
+    if (!customPlaceholder) input.placeholder = "Search for a different address";
   }).catch(function (err) {
     // Details unavailable: let the person type the parts themselves
     handleLookupError(err);
@@ -312,12 +324,13 @@ function choose(i) {
 }
 
 function fillFields(p) {
+  var unit = p.unit || "";
   field.street.value   = [p.streetNumber, p.route].filter(Boolean).join(" ");
-  field.line2.value    = /^\d+[A-Za-z]?$/.test(p.unit) ? "Unit " + p.unit : p.unit;
-  field.city.value     = p.city;
-  field.province.value = p.province;
-  field.postal.value   = p.postalCode;
-  field.country.value  = p.country;
+  field.line2.value    = /^\d+[A-Za-z]?$/.test(unit) ? "Unit " + unit : unit;
+  field.city.value     = p.city || "";
+  field.province.value = p.province || "";
+  field.postal.value   = p.postalCode || "";
+  field.country.value  = p.country || "";
   showFields(true);
   pushToForm();
   // A street without a house number (or nothing at all) needs finishing by hand
@@ -332,7 +345,9 @@ input.addEventListener("input", function () {
   debounceTimer = setTimeout(function () {
     var mySeq = ++requestSeq;
     api("suggest", { q: text }).then(function (res) {
-      if (mySeq === requestSeq) render(res.groups);   // ignore stale responses
+      if (mySeq !== requestSeq) return;   // ignore stale responses
+      note.hidden = true;                 // search works (again)
+      render(res.groups);
     }).catch(function (err) {
       if (mySeq === requestSeq) openList(false);
       handleLookupError(err);
@@ -366,6 +381,8 @@ function searchUnavailable(message) {
 }
 
 /* ---------- Start ---------- */
+// Keep the form's frame as tall as the widget (rotation, wrapping labels, fonts loading)
+if (window.ResizeObserver) new ResizeObserver(resizeFrame).observe(document.querySelector(".wrap"));
 setupJotform();
 </script>
 </body>

@@ -54,6 +54,7 @@ In `cloudflare.config.ts`:
 - `name`: any Worker name.
 - `domains`: the address Jotform will load the widget from, on a domain in your Cloudflare account.
 - `PRIMARY_COUNTRY`: two-letter country code listed first in suggestions (default `ca`).
+- `API_RATE_LIMIT`: address lookups allowed per visitor per minute (default 30). A person filling in the form uses about 2–10.
 
 In `src/index.ts`, `ALLOWED_HOSTS` lists the sites allowed to embed the widget. The default `jotform.com` covers `form.jotform.com`, `eu.jotform.com` and the form builder. Add your own domain if your forms use a Jotform custom domain.
 
@@ -100,7 +101,7 @@ All parameters are optional. Leave one out or blank to keep the default. Sizes t
 | `searchPlaceholder` | Search bar hint | Search for your address |
 | `manualLinkText` | Manual-entry link | Can't find it? Enter address manually |
 | `labelStreet`, `labelLine2`, `labelCity`, `labelProvince`, `labelPostal`, `labelCountry` | Field labels. These also name the lines in the submitted value. | Street Address, … |
-| `customCSS` | Extra CSS added to the widget, e.g. `.field label { font-weight: 600 }` | empty |
+| `customCSS` | Extra CSS added to the widget, e.g. `.field label { font-weight: 600 }`. Jotform's widget library applies a setting with this name too, so the widget's Custom CSS tab may work the same way. | empty |
 
 The widget can't read your form's theme automatically (browsers keep an iframe from another site apart from the page around it), so set the colours to match your form's Form Designer.
 
@@ -118,10 +119,21 @@ curl -H 'Sec-Fetch-Site: same-origin' 'http://localhost:5173/api/suggest?q=219+d
 
 Google errors are logged by the Worker (`Google Places … failed: <status> <message>`). After deploying, view them in the Cloudflare dashboard under the Worker's logs.
 
-## Limits
+## Security
 
-- The iframe and same-origin checks stop casual use and stop other websites from embedding the widget. Request headers can be faked by scripts, though, and any Jotform account that knows your URL could embed it. Keep the Google quota cap in place.
-- Google requires the "Powered by Google" note in the suggestion list. Keep it.
+What protects what:
+
+- **Google key:** stored as a Cloudflare secret and only used by the Worker. It never appears in the page, the repo or the browser. Restrict it to Places API (New) and set a daily quota.
+- **Widget page:** served only inside an iframe on `jotform.com` (`Sec-Fetch-Dest` check plus a `frame-ancestors` policy). Direct visits get 403. It also sends `nosniff`, `Referrer-Policy: same-origin`, a Permissions-Policy, and a CSP that blocks plugins, `<base>` tags and form posts.
+- **Lookup API:** GET only, same-origin requests only, strict input checks (query length, session-token and place-ID formats), generic error messages, no caching, and a per-visitor rate limit. Google errors are logged server-side with query strings redacted, since they contain what people type.
+- **Address text:** suggestions and labels are inserted as plain text, never as HTML, so a crafted address can't run code in the widget.
+
+Known limits:
+
+- Header checks can be faked by scripts, and any Jotform account that knows your URL can embed the widget. The rate limit slows a single visitor down; many visitors working together could still use up the daily Google quota. **The quota cap is your hard cost limit.** If search stops working, check the Worker's logs for Google `429` errors.
+- Script sources aren't restricted by the CSP, because Jotform's widget library loads its own theme scripts and fonts at runtime.
+- Submitted addresses come from the respondent's browser, like any form field, so treat them as unverified input. If you export submissions to a spreadsheet, a value starting with `=`, `+`, `-` or `@` could be read as a formula.
+- Google requires the "Powered by Google" note in the suggestion list. Keep it. Google's terms also don't allow caching suggestions, which is why nothing is cached.
 
 ## Support
 

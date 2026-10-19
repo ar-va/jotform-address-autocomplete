@@ -21,6 +21,11 @@ export default defineConfig({
 			GOOGLE_MAPS_API_KEY: bindings.secret(),
 			// Suggestions from this country (ISO 3166-1 alpha-2 code) are listed first.
 			PRIMARY_COUNTRY: bindings.text("ca"),
+			// Address lookups allowed per visitor (IP address) per minute. A person
+			// filling in the form uses about 2–10; this stops one visitor from
+			// burning through the daily Google quota. The namespace is any number
+			// unique within your Cloudflare account.
+			API_RATE_LIMIT: bindings.rateLimit({ namespace: "1001", simple: { limit: 30, period: 60 } }),
 		},
 	},
 });
