@@ -42,8 +42,8 @@ You need:
 ### 1. Get the code
 
 ```sh
-git clone <this repo>
-cd <repo folder>
+git clone https://github.com/ar-va/jotform-address-autocomplete-google-maps.git
+cd jotform-address-autocomplete-google-maps
 npm install
 ```
 
