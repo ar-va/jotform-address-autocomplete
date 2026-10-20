@@ -12,6 +12,7 @@ You host it yourself, for free, on Cloudflare. Your Google key stays private on 
 
 - [What it does](#what-it-does)
 - [What you need](#what-you-need)
+- [Set it up with an AI assistant](#set-it-up-with-an-ai-assistant)
 - [Setup, step by step](#setup-step-by-step)
 - [Customise the look and wording](#customise-the-look-and-wording)
 - [Splitting the address into columns](#splitting-the-address-into-columns)
@@ -40,6 +41,44 @@ You host it yourself, for free, on Cloudflare. Your Google key stays private on 
 | A computer with **Node.js 22.18 or newer** | To upload the widget to Cloudflare | Free, from [nodejs.org](https://nodejs.org) (choose the LTS version) |
 
 Plan for about 30–45 minutes the first time. You'll type a few commands into a **terminal**: on a Mac open the **Terminal** app; on Windows open **PowerShell**. Type or paste each command, then press Enter.
+
+## Set it up with an AI assistant
+
+If you use an AI coding assistant that can run commands on your computer (Claude Code, Cursor, GitHub Copilot in agent mode, or similar), you can let it do the technical parts. Copy this prompt into it:
+
+```text
+Help me set up my own copy of the Jotform Address Autocomplete widget from
+https://github.com/ar-va/jotform-address-autocomplete-google-maps
+by following its README. You can run commands on my computer; I'll do the
+steps that need a browser or one of my accounts.
+
+1. Check that Node.js 22.18 or newer is installed (if not, tell me how to
+   install it). Get the project (git clone it, or tell me to download the ZIP),
+   then run "npm install" and "npm install --global cf" in the project folder.
+2. Run "cf auth login" and wait while I sign in to Cloudflare in my browser.
+3. Ask me which address the widget should use: a subdomain of a domain in my
+   Cloudflare account (for example address.example.com), or "workers.dev" if I
+   don't have a domain. Create .env from .env.example with WIDGET_DOMAIN set to it.
+4. Walk me through getting a Google Maps key (README step 3): billing on,
+   Places API (New) enabled, the key restricted to Places API (New) only,
+   application restrictions "None", and a daily quota.
+5. Create .dev.vars from .dev.vars.example and let ME paste the key into it.
+   Never ask me to paste the key into this chat, and never print, log or commit
+   it. Check the file has one line starting with GOOGLE_MAPS_API_KEY= without
+   showing the key.
+6. Deploy with "cf deploy --secrets-file .dev.vars". If it fails, use the
+   README's Troubleshooting section to fix it.
+7. Check it works: a plain request to https://<my address>/ should get 403,
+   and the same request with the header "Sec-Fetch-Dest: iframe" should get 200.
+8. Walk me through README step 7 (creating the iFrame Widget in Jotform with my
+   address as its URL) and step 8 (adding it to a form). Ask which optional
+   settings I want (country, colours, labels) and tell me exactly what to enter.
+
+Never commit or share .env or .dev.vars. Ask me before changing anything in my
+Cloudflare or Google account other than the deploy itself.
+```
+
+It will still need you for the parts only you can do: signing in, creating the Google key, and clicking through Jotform. The steps below explain each of them if you'd rather do it yourself.
 
 ## Setup, step by step
 
