@@ -78,16 +78,24 @@ Copy the key; you'll need it in step 5.
 
 ### 4. Tell the project your address
 
-Open the file `cloudflare.config.ts` in any text editor (TextEdit, Notepad, VS Code) and change two lines:
+Choose the address your widget will live at, on a domain in your Cloudflare account, for example `address.example.com`. Cloudflare creates it for you on the first upload; you don't need to set up DNS.
 
-```ts
-name: "jotform-address-autocomplete-google-maps",   // ← any name you like (lowercase, dashes)
-domains: ["address.example.com"],                  // ← your own address, e.g. "address.example.com"
+In the project folder there's a file called `.env.example`. Make a copy of it called `.env`:
+
+```sh
+cp .env.example .env        # Mac
+copy .env.example .env      # Windows
 ```
 
-The address must be on a domain that's in your Cloudflare account. Cloudflare creates it for you on the first upload. You don't need to set up DNS.
+Open `.env` in a text editor (TextEdit, Notepad, VS Code) and put your address after the `=` sign:
 
-> **No domain?** You can use a free `workers.dev` address instead. In the Cloudflare dashboard open **Workers & Pages** and pick your `workers.dev` subdomain if asked. Then, in `cloudflare.config.ts`, delete the `domains: [...]` line and change `workersDev: false` to `workersDev: true`. Your widget address will be shown after the upload in step 6.
+```
+WIDGET_DOMAIN=address.example.com
+```
+
+This file stays on your computer, so your address isn't stored in the project's code.
+
+> **No domain?** Use a free `workers.dev` address instead: write `WIDGET_DOMAIN=workers.dev`, and in the Cloudflare dashboard open **Workers & Pages** and pick your `workers.dev` subdomain if asked. Your widget address is shown after the upload in step 6.
 
 **Only if your forms use your own domain** (a Jotform custom domain such as `forms.example.com`, instead of `form.jotform.com`): open `src/index.ts` and add it to the `ALLOWED_HOSTS` list near the top, like `["jotform.com", "example.com"]`. Otherwise leave that file alone.
 
@@ -209,7 +217,8 @@ Most often Google's daily limit is used up. Check **Google Cloud → APIs & Serv
 **The upload (`cf deploy`) fails.**
 Read the message:
 
-- "workers.dev subdomain": use a domain in `domains` (step 4), or pick a `workers.dev` subdomain in the Cloudflare dashboard.
+- "WIDGET_DOMAIN is not set": create the `.env` file from step 4.
+- "workers.dev subdomain": set your own domain in `.env` (step 4), or pick a `workers.dev` subdomain in the Cloudflare dashboard.
 - Anything about the domain: check it's spelled correctly and that the domain is in your Cloudflare account.
 - Not signed in: run `cf auth login` again.
 
@@ -237,8 +246,9 @@ If you keep your copy of the project on GitHub, Cloudflare can redeploy whenever
 1. Cloudflare dashboard → **Workers & Pages** → your widget → **Settings → Builds → Connect**.
 2. Choose GitHub and give access to **only that repository**.
 3. Branch `main`, **Build command** empty, **Deploy command** `npx cf deploy`, **Preview builds** off.
+4. Under **Build variables**, add `WIDGET_DOMAIN` with your widget address (the same value as in your `.env`). Mark it as a secret if you'd rather not show it in the dashboard.
 
-Your Google key stays in Cloudflare; never put it in the repository.
+Your Google key and your address stay in Cloudflare; never put them in the repository.
 
 </details>
 
@@ -289,7 +299,8 @@ Jotform form ──iframe──▶ your-domain/              widget page (public
 | --- | --- |
 | `public/index.html` | The widget page: HTML, CSS and JavaScript in one file, no build step |
 | `src/index.ts` | The Cloudflare Worker: page gating, lookup API, Google calls |
-| `cloudflare.config.ts` | Worker name, domain, bindings (assets, secret, rate limit) |
+| `cloudflare.config.ts` | Worker name, bindings (assets, secret, rate limit); reads your address from `WIDGET_DOMAIN` |
+| `.env.example` | Template for `.env`, which holds your widget address |
 | `docs/countries.txt` | Options for the `searchCountry` dropdown |
 | `.dev.vars.example` | Template for the local secrets file |
 
