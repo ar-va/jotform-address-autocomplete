@@ -48,7 +48,7 @@ If you use an AI coding assistant that can run commands on your computer (Claude
 
 ```text
 Help me set up my own copy of the Jotform Address Autocomplete widget from
-https://github.com/ar-va/jotform-address-autocomplete-google-maps
+https://github.com/ar-va/jotform-address-autocomplete
 by following its README. You can run commands on my computer; I'll do the
 steps that need a browser or one of my accounts.
 
@@ -86,7 +86,7 @@ It will still need you for the parts only you can do: signing in, creating the G
 
 Easiest: on this page click the green **Code** button → **Download ZIP**, then unzip it somewhere you'll find it again, such as your Documents folder.
 
-(If you use Git: `git clone https://github.com/ar-va/jotform-address-autocomplete-google-maps.git`)
+(If you use Git: `git clone https://github.com/ar-va/jotform-address-autocomplete.git`)
 
 ### 2. Install the tools
 
