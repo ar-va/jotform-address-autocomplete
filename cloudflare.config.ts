@@ -22,7 +22,7 @@ const useWorkersDev = widgetDomain === "workers.dev";
 
 export default defineConfig({
 	worker: {
-		name: "jotform-address-autocomplete-google-maps",
+		name: "jotform-address-autocomplete",
 		compatibilityDate: "2026-09-30",
 		entrypoint,
 		// Every request goes through src/index.ts so it can block non-Jotform loads.

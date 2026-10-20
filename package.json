@@ -1,5 +1,5 @@
 {
-	"name": "jotform-address-autocomplete-google-maps",
+	"name": "jotform-address-autocomplete",
 	"private": true,
 	"type": "module",
 	"scripts": {
